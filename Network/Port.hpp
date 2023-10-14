@@ -4,9 +4,24 @@
 #include <cstddef>
 
 namespace Network {
+    struct Message {
+    public: /** Construction **/
+        Message() = delete;
+        Message(const std::size_t sourceID, const std::size_t destinationID);
+
+    public: /** Addressing **/
+        const std::size_t m_sourceID;
+        const std::size_t m_destinationID;
+
+    public: /** Data **/
+        struct {
+            float data;
+        } m_data;
+    };
+
     class Port {
     public: /** Aliases **/
-        using MsgType = int;
+        using MsgType = Message;
 
     public: /** Construction **/
         Port() = default;
@@ -44,6 +59,12 @@ namespace Network {
         void pushOutgoing(const MsgType &msg);
 
         /**
+         * @brief  Get the amount of outgoing messages
+         * @return Current amount of messages in the outgoing queue
+         */
+        [[nodiscard]] std::size_t outgoingAmount() const;
+
+        /**
          * @brief Pop an incoming message from the port
          * @return A message instance
          *
@@ -52,7 +73,7 @@ namespace Network {
         [[nodiscard]] MsgType popIncoming();
 
         /**
-         * @brief Check if the port has a fetch-able incoming message
+         * @brief Check if the port has a ready-to-fetch incoming message
          * @return True If at least one message can be fetched
          */
         [[nodiscard]] bool hasIncoming() const;

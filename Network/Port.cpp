@@ -22,7 +22,7 @@ void Port::pushIncoming(const Port::MsgType &msg)
 
 void Port::pushOutgoing(const Port::MsgType &msg)
 {
-    m_incoming.emplace_back(msg, PortDelays::outgoingMsg);
+    m_outgoing.emplace_back(msg, PortDelays::outgoingMsg);
 }
 
 void Port::tick()
@@ -97,3 +97,13 @@ Port::MsgType Port::popIncoming()
     return  msg;
 }
 
+std::size_t Port::outgoingAmount() const
+{
+    return m_outgoing.size();
+}
+
+Message::Message(const std::size_t sourceID, const std::size_t destinationID)
+: m_sourceID(sourceID), m_destinationID(destinationID), m_data()
+{
+    // Nothing
+}
