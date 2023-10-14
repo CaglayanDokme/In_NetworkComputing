@@ -35,6 +35,8 @@ int main()
     std::vector<Network::Switches::Core> coreSwitches;
     std::vector<Network::Switches::Aggregate> aggSwitches;
     std::vector<Network::Switches::Edge> edgeSwitches;
+
+    Computer::setTotalAmount(compNodeAmount);
     std::vector<Computer> computeNodes(compNodeAmount);
     spdlog::debug("Generated {} computing nodes in total.", computeNodes.size());
 
@@ -177,7 +179,34 @@ int main()
     }
     spdlog::info("Network established successfully!");
 
-    // TODO Run simulation
+    std::size_t tick = 0;
+    while(++tick) {
+        spdlog::trace("Tick #{}", tick);
+
+        for(auto &coreSw : coreSwitches) {
+            if(!coreSw.tick()) {
+                spdlog::error("Tick #{} failed for core switch #{}!", tick, coreSw.getID());
+            }
+        }
+
+        for(auto &aggSw : aggSwitches) {
+            if(!aggSw.tick()) {
+                spdlog::error("Tick #{} failed for aggregate switch #{}!", tick, aggSw.getID());
+            }
+        }
+
+        for(auto &edgeSw : edgeSwitches) {
+            if(!edgeSw.tick()) {
+                spdlog::error("Tick #{} failed for edge switch #{}!", tick, edgeSw.getID());
+            }
+        }
+
+        for(auto &compNode : computeNodes) {
+            if(!compNode.tick()) {
+                spdlog::error("Tick #{} failed for computing node #{}!", tick, compNode.getID());
+            }
+        }
+    }
 
     spdlog::warn("Program finished!");
 

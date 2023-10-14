@@ -15,6 +15,14 @@ public: /** Construction **/
     Computer &operator=(Computer &&) = delete;
 
 public: /** Methods **/
+    /**
+     * @brief Initially and once, set the total amount of computing nodes to be spawned
+     * @param totalAmount Total amount of computing nodes
+     *
+     * @attention This function must be called once prior to spawning any computing node.
+     */
+    static void setTotalAmount(const std::size_t totalAmount);
+
     [[nodiscard]] bool tick();
 
     /**
@@ -40,5 +48,6 @@ private: /** Members **/
     Network::Port m_port;
 
     // Static
-    inline static std::size_t nextID = 0; // i.e. Number of computing nodes in total
+    inline static std::size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
+    inline static std::size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
 };
