@@ -2,6 +2,7 @@
 
 #include "ISwitch.hpp"
 #include <vector>
+#include <map>
 
 namespace Network::Switches {
     class Core : public ISwitch {
@@ -21,6 +22,8 @@ namespace Network::Switches {
         [[nodiscard]] bool tick() final;
 
     private: /** Members **/
+        std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
+
         inline static std::size_t nextID = 0; // i.e. Number of core switches in total
     };
 }

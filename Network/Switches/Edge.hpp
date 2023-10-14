@@ -2,6 +2,7 @@
 
 #include "ISwitch.hpp"
 #include <vector>
+#include <map>
 
 namespace Network::Switches {
     class Edge : public ISwitch {
@@ -39,6 +40,8 @@ namespace Network::Switches {
         [[nodiscard]] Port &getDownPort(const std::size_t &portID);
 
     private: /** Members **/
+        std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
+
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total
     };
 }
