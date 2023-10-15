@@ -11,7 +11,7 @@
 
 int main(const int argc, const char *const argv[])
 {
-    cxxopts::Options options("In-Network Computing Simulation", "Description");
+    cxxopts::Options options(argv[0], "In-network computing simulation based on fat-tree topology");
 
     options.add_options()
             ("ports",
@@ -37,6 +37,10 @@ int main(const int argc, const char *const argv[])
         arguments = options.parse(argc, argv);
 
         if(arguments.count("help")) {
+            if(arguments.arguments().size() > 1) {
+                spdlog::warn("Help requested, ignoring {} other arguments!", arguments.arguments().size() - 1);
+            }
+
             spdlog::info(options.help());
 
             return 0;
