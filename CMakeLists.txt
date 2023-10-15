@@ -16,6 +16,7 @@ add_executable(In_NetworkComputing main.cpp
         Network/Switches/Edge.hpp
         Computer.cpp
         Computer.hpp
+        cxxopts/cxxopts.hpp
 )
 
 add_definitions(-DSPDLOG_ENABLE_PCH)

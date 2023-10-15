@@ -1,27 +1,69 @@
-#include <vector>
-#include "Computer.hpp"
-#include "Network/Switches/Core.hpp"
-#include "Network/Switches/Aggregate.hpp"
-#include "Network/Switches/Edge.hpp"
+// Libraries
+#include "cxxopts/cxxopts.hpp"
 #include "spdlog/spdlog.h"
+#include <vector>
 
-int main()
+// User-defined
+#include "Network/Switches/Aggregate.hpp"
+#include "Network/Switches/Core.hpp"
+#include "Network/Switches/Edge.hpp"
+#include "Computer.hpp"
+
+int main(const int argc, const char *const argv[])
 {
-    spdlog::set_level(spdlog::level::trace);
-    spdlog::info("Starting program..");
+    cxxopts::Options options("In-Network Computing Simulation", "Description");
 
-    const std::size_t portPerSwitch = 4; // TODO Parse from command line
+    options.add_options()
+            ("ports",
+             "Ports per switch(2, 4, 6, ..., 2n)",
+             cxxopts::value<std::size_t>()->default_value(std::to_string(4)))
+
+            ("log_level",
+             "Level of log filter"
+             "\n0: Trace"
+             "\n1: Debug"
+             "\n2: Info"
+             "\n3: Warning"
+             "\n4: Error"
+             "\n5: Critical"
+             "\n6: No log",
+             cxxopts::value<int>()->default_value(std::to_string(spdlog::level::info)))
+
+            ("help", "Print help");
+
+    cxxopts::ParseResult arguments;
+
+    try {
+        arguments = options.parse(argc, argv);
+
+        if(arguments.count("help")) {
+            spdlog::info(options.help());
+
+            return 0;
+        }
+    }
+    catch(const cxxopts::exceptions::exception& e) {
+        spdlog::critical("Couldn't parse arguments! {}", e.what());
+
+        return -1;
+    }
+
+    const std::size_t portPerSwitch = arguments["ports"].as<std::size_t>();
+    spdlog::set_level(spdlog::level::level_enum(arguments["log_level"].as<int>()));
+    spdlog::info("Starting program..");
 
     if(0 == portPerSwitch) {
         spdlog::critical("Port per switch cannot be zero!");
 
         return  -1;
     }
-
-    if(0 != (portPerSwitch % 2)) {
-        spdlog::critical("Port per switch({}) must be an exact multiple of 2!");
+    else if(0 != (portPerSwitch % 2)) {
+        spdlog::critical("Port per switch({}) must be an exact multiple of 2!", portPerSwitch);
 
         return  -1;
+    }
+    else {
+        spdlog::debug("Port per switch determined as {}", portPerSwitch);
     }
 
     // Derived constants
