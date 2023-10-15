@@ -1,6 +1,6 @@
 // Libraries
-#include "cxxopts/cxxopts.hpp"
 #include "spdlog/spdlog.h"
+#include "cxxopts.hpp"
 #include <vector>
 
 // User-defined

@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 include_directories(${CMAKE_SOURCE_DIR})
 add_subdirectory(spdlog)
+add_subdirectory(cxxopts)
 
 add_executable(In_NetworkComputing main.cpp
         Network/Port.cpp
@@ -19,7 +20,7 @@ add_executable(In_NetworkComputing main.cpp
         Network/Switches/Edge.hpp
         Computer.cpp
         Computer.hpp
-        cxxopts/cxxopts.hpp
 )
 
 target_link_libraries(In_NetworkComputing PRIVATE spdlog)
+target_link_libraries(In_NetworkComputing PRIVATE cxxopts)
