@@ -3,6 +3,9 @@ project(In_NetworkComputing)
 
 set(CMAKE_CXX_STANDARD 17)
 
+include_directories(${CMAKE_SOURCE_DIR})
+add_subdirectory(spdlog)
+
 add_executable(In_NetworkComputing main.cpp
         Network/Port.cpp
         Network/Port.hpp
@@ -19,6 +22,4 @@ add_executable(In_NetworkComputing main.cpp
         cxxopts/cxxopts.hpp
 )
 
-add_definitions(-DSPDLOG_ENABLE_PCH)
-include_directories(${CMAKE_SOURCE_DIR})
-target_link_libraries(In_NetworkComputing PRIVATE ${CMAKE_SOURCE_DIR}/spdlog/libspdlog.a)
+target_link_libraries(In_NetworkComputing PRIVATE spdlog)
