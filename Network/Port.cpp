@@ -1,4 +1,5 @@
 #include "Port.hpp"
+#include "Message.hpp"
 #include <algorithm>
 #include "spdlog/spdlog.h"
 
@@ -9,20 +10,20 @@ namespace PortDelays {
     static constexpr std::size_t outgoingMsg = 3;
 }
 
-Port::st_Msg::st_Msg(const Port::MsgType &data, const size_t &delay)
-: data(data), remaining(delay)
+Port::st_Msg::st_Msg(std::unique_ptr<const Message> data, const size_t &delay)
+: data(std::move(data)), remaining(delay)
 {
     // Nothing
 }
 
-void Port::pushIncoming(const Port::MsgType &msg)
+void Port::pushIncoming(std::unique_ptr<const Message> msg)
 {
-    m_incoming.emplace_back(msg, PortDelays::incomingMsg);
+    m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
 }
 
-void Port::pushOutgoing(const Port::MsgType &msg)
+void Port::pushOutgoing(std::unique_ptr<const Message> msg)
 {
-    m_outgoing.emplace_back(msg, PortDelays::outgoingMsg);
+    m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
 }
 
 void Port::tick()
@@ -32,7 +33,7 @@ void Port::tick()
         if(!m_outgoing.empty()) {
             if(0 == m_outgoing.front().remaining) {
                 if(m_pRemotePort) {
-                    m_pRemotePort->pushIncoming(m_outgoing.front().data);
+                    m_pRemotePort->pushIncoming(std::move(m_outgoing.front().data));
                     m_outgoing.pop_front();
                 }
                 else {
@@ -78,32 +79,26 @@ bool Port::isConnected() const
 bool Port::hasIncoming() const
 {
     if(m_incoming.empty()) {
-        return  false;
+        return false;
     }
 
-    return  (0 == m_incoming.front().remaining);
+    return (0 == m_incoming.front().remaining);
 }
 
-Port::MsgType Port::popIncoming()
+std::unique_ptr<const Message> Port::popIncoming()
 {
     if(!hasIncoming()) {
         spdlog::error("No incoming message, potential undefined behaviour!");
     }
 
-    MsgType msg = m_incoming.front().data;
+    std::unique_ptr<const Message> msg = std::move(m_incoming.front().data);
 
     m_incoming.pop_front();
 
-    return  msg;
+    return msg;
 }
 
 std::size_t Port::outgoingAmount() const
 {
     return m_outgoing.size();
-}
-
-Message::Message(const std::size_t sourceID, const std::size_t destinationID)
-: m_sourceID(sourceID), m_destinationID(destinationID), m_data()
-{
-    // Nothing
 }

@@ -2,27 +2,11 @@
 
 #include <deque>
 #include <cstddef>
+#include <memory>
+#include "Network/Message.hpp"
 
 namespace Network {
-    struct Message {
-    public: /** Construction **/
-        Message() = delete;
-        Message(const std::size_t sourceID, const std::size_t destinationID);
-
-    public: /** Addressing **/
-        const std::size_t m_sourceID;
-        const std::size_t m_destinationID;
-
-    public: /** Data **/
-        struct {
-            float data;
-        } m_data;
-    };
-
     class Port {
-    public: /** Aliases **/
-        using MsgType = Message;
-
     public: /** Construction **/
         Port() = default;
 
@@ -54,9 +38,9 @@ namespace Network {
 
         /**
          * @brief Push a message to port's outgoing queue
-         * @param msg Read-only reference to copiable message
+         * @param msg A unique pointer to the outgoing message
          */
-        void pushOutgoing(const MsgType &msg);
+        void pushOutgoing(std::unique_ptr<const Message> msg);
 
         /**
          * @brief  Get the amount of outgoing messages
@@ -66,11 +50,9 @@ namespace Network {
 
         /**
          * @brief Pop an incoming message from the port
-         * @return A message instance
-         *
-         * @note
+         * @return A unique pointer to the incoming message
          */
-        [[nodiscard]] MsgType popIncoming();
+        [[nodiscard]] std::unique_ptr<const Message> popIncoming();
 
         /**
          * @brief Check if the port has a ready-to-fetch incoming message
@@ -81,19 +63,19 @@ namespace Network {
     private:
         /**
          * @brief Push an incoming message to port
-         * @param msg Read-only reference to copiable message
+         * @param msg A unique pointer to the incoming message
          *
          * @note This method can only be called from another port which has an outgoing message
          */
-        void pushIncoming(const MsgType &msg);
+        void pushIncoming(std::unique_ptr<const Message> msg);
 
     private: /** Members **/
         Port *m_pRemotePort{nullptr};
 
         struct st_Msg {
-            st_Msg(const MsgType &data, const std::size_t &delay);
+            st_Msg(std::unique_ptr<const Message> data, const std::size_t &delay);
 
-            MsgType data;
+            std::unique_ptr<const Message> data;
             std::size_t remaining;  // Remaining ticks to fetch
         };
 

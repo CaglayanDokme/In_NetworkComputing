@@ -1,5 +1,6 @@
-#include "Core.hpp"
+#include "Network/Message.hpp"
 #include "spdlog/spdlog.h"
+#include "Core.hpp"
 
 using namespace Network::Switches;
 
@@ -25,13 +26,13 @@ bool Core::tick()
             continue;
         }
 
-        const auto msg = sourcePort.popIncoming();
-        spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
+        auto msg = sourcePort.popIncoming();
+        spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg->m_destinationID);
 
-        const auto targetPortIdx = msg.m_destinationID / compNodePerPort;
+        const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
         spdlog::trace("Core Switch({}): Re-directing to port #{}..", targetPortIdx);
 
-        m_ports.at(targetPortIdx).pushOutgoing(msg);
+        m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 
         if(portIdx == targetPortIdx) {
             spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);

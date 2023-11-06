@@ -1,5 +1,6 @@
 #include "Computer.hpp"
 #include "spdlog/spdlog.h"
+#include "Network/Message.hpp"
 
 Computer::Computer()
 : m_ID(nextID++)
@@ -40,9 +41,9 @@ bool Computer::tick()
     m_port.tick();
 
     if(m_port.hasIncoming()) {
-        const auto msg = m_port.popIncoming();
+        auto msg = m_port.popIncoming();
 
-        spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg.m_sourceID);
+        spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
     }
 
     return true;

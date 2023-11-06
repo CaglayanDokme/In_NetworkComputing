@@ -1,5 +1,6 @@
 #include "Edge.hpp"
 #include "spdlog/spdlog.h"
+#include "Network/Message.hpp"
 
 using namespace Network::Switches;
 
@@ -38,16 +39,16 @@ bool Edge::tick()
             continue;
         }
 
-        const auto msg = sourcePort.popIncoming();
-        spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
+        auto msg = sourcePort.popIncoming();
+        spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, portIdx, msg->m_destinationID);
 
         // Decide on direction (up or down)
-        if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
+        if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
             spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
 
             auto &targetPort = search->second;
 
-            targetPort.pushOutgoing(msg);
+            targetPort.pushOutgoing(std::move(msg));
         }
         else { // Re-direct to up-sourcePort(s)
             spdlog::trace("Edge Switch({}): Redirecting to an up-port..", m_ID);
@@ -61,7 +62,7 @@ bool Edge::tick()
             static const std::size_t upPortAmount = m_portAmount / 2;
             auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
 
-            targetPort->pushOutgoing(msg);
+            targetPort->pushOutgoing(std::move(msg));
         }
     }
 

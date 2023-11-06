@@ -20,6 +20,8 @@ add_executable(In_NetworkComputing main.cpp
         Network/Switches/Edge.hpp
         Computer.cpp
         Computer.hpp
+        Network/Message.cpp
+        Network/Message.hpp
 )
 
 target_link_libraries(In_NetworkComputing PRIVATE spdlog)
