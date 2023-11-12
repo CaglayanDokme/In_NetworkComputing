@@ -39,6 +39,20 @@ namespace Network::Switches {
          */
         [[nodiscard]] Port &getDownPort(const std::size_t &portID);
 
+    private:
+        /**
+         * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)
+         * @return Reference to the most available port
+         */
+        [[nodiscard]] Port &getAvailableUpPort();
+
+        /**
+         * @brief  Get number of up/down ports
+         * @return Amount of requested port type
+         */
+        [[nodiscard]] std::size_t getDownPortAmount() const;
+        [[nodiscard]] std::size_t getUpPortAmount() const;
+
     private: /** Members **/
         std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
 

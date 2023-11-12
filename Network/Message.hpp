@@ -6,11 +6,25 @@ namespace Network {
     class Message {
     public: /** Construction **/
         Message() = delete;
-        Message(const std::size_t sourceID, const std::size_t destinationID);
+        explicit Message(const std::size_t sourceID, const std::size_t destinationID);
 
     public: /** Addressing **/
         const std::size_t m_sourceID;
         const std::size_t m_destinationID;
+
+    public: /** Data **/
+        struct {
+            float data;
+        } m_data;
+    };
+
+    class BroadcastMessage {
+    public: /** Construction **/
+        BroadcastMessage() = delete;
+        explicit BroadcastMessage(const std::size_t sourceID);
+
+    public: /** Addressing **/
+        const std::size_t m_sourceID;
 
     public: /** Data **/
         struct {

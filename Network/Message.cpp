@@ -7,3 +7,9 @@ Message::Message(const std::size_t sourceID, const std::size_t destinationID)
 {
     // Nothing
 }
+
+BroadcastMessage::BroadcastMessage(const std::size_t sourceID)
+: m_sourceID(sourceID)
+{
+    // Nothing
+}

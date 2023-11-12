@@ -1,5 +1,6 @@
 #pragma  once
 
+#include <any>
 #include <deque>
 #include <cstddef>
 #include <memory>
@@ -17,6 +18,17 @@ namespace Network {
         // Must be move-able to store in containers
         Port(Port &&) noexcept = default;
         Port &operator=(Port &&) = default;
+
+    public: /** Operators **/
+        /**
+         * @brief Check if ports are the same
+         * @param port Read-only reference to the other port
+         * @return True If ports are the same
+         *
+         * @note Actually, no two ports can be equal.
+         *       This method shall be used to check if two port references refer to the same one.
+         */
+        [[nodiscard]] bool operator==(const Port &port);
 
     public: /** Methods **/
         void tick();
@@ -40,7 +52,7 @@ namespace Network {
          * @brief Push a message to port's outgoing queue
          * @param msg A unique pointer to the outgoing message
          */
-        void pushOutgoing(std::unique_ptr<const Message> msg);
+        void pushOutgoing(std::unique_ptr<std::any> msg);
 
         /**
          * @brief  Get the amount of outgoing messages
@@ -52,7 +64,7 @@ namespace Network {
          * @brief Pop an incoming message from the port
          * @return A unique pointer to the incoming message
          */
-        [[nodiscard]] std::unique_ptr<const Message> popIncoming();
+        [[nodiscard]] std::unique_ptr<std::any> popIncoming();
 
         /**
          * @brief Check if the port has a ready-to-fetch incoming message
@@ -67,15 +79,15 @@ namespace Network {
          *
          * @note This method can only be called from another port which has an outgoing message
          */
-        void pushIncoming(std::unique_ptr<const Message> msg);
+        void pushIncoming(std::unique_ptr<std::any> msg);
 
     private: /** Members **/
         Port *m_pRemotePort{nullptr};
 
         struct st_Msg {
-            st_Msg(std::unique_ptr<const Message> data, const std::size_t &delay);
+            st_Msg(std::unique_ptr<std::any> data, const std::size_t &delay);
 
-            std::unique_ptr<const Message> data;
+            std::unique_ptr<std::any> data;
             std::size_t remaining;  // Remaining ticks to fetch
         };
 

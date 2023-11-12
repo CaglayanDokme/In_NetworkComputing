@@ -10,18 +10,23 @@ namespace PortDelays {
     static constexpr std::size_t outgoingMsg = 3;
 }
 
-Port::st_Msg::st_Msg(std::unique_ptr<const Message> data, const size_t &delay)
+bool Port::operator==(const Port &port)
+{
+    return (this == &port);
+}
+
+Port::st_Msg::st_Msg(std::unique_ptr<std::any> data, const size_t &delay)
 : data(std::move(data)), remaining(delay)
 {
     // Nothing
 }
 
-void Port::pushIncoming(std::unique_ptr<const Message> msg)
+void Port::pushIncoming(std::unique_ptr<std::any> msg)
 {
     m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
 }
 
-void Port::pushOutgoing(std::unique_ptr<const Message> msg)
+void Port::pushOutgoing(std::unique_ptr<std::any> msg)
 {
     m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
 }
@@ -85,14 +90,15 @@ bool Port::hasIncoming() const
     return (0 == m_incoming.front().remaining);
 }
 
-std::unique_ptr<const Message> Port::popIncoming()
+std::unique_ptr<std::any> Port::popIncoming()
 {
     if(!hasIncoming()) {
         spdlog::error("No incoming message, potential undefined behaviour!");
+
+        return nullptr;
     }
 
-    std::unique_ptr<const Message> msg = std::move(m_incoming.front().data);
-
+    auto msg = std::move(m_incoming.front().data);
     m_incoming.pop_front();
 
     return msg;

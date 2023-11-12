@@ -26,16 +26,40 @@ bool Core::tick()
             continue;
         }
 
-        auto msg = sourcePort.popIncoming();
-        spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg->m_destinationID);
+        auto anyMsg = sourcePort.popIncoming();
 
-        const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
-        spdlog::trace("Core Switch({}): Re-directing to port #{}..", targetPortIdx);
+        if(anyMsg->type() == typeid(Network::Message)) {
+            const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
 
-        m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
+            spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
 
-        if(portIdx == targetPortIdx) {
-            spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
+            const auto targetPortIdx = msg.m_destinationID / compNodePerPort;
+            spdlog::trace("Core Switch({}): Re-directing to port #{}..", targetPortIdx);
+
+            m_ports.at(targetPortIdx).pushOutgoing(std::move(anyMsg));
+
+            if(portIdx == targetPortIdx) {
+                spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
+            spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
+
+            // Re-direct to all other down-ports
+            for(auto &port : m_ports) {
+
+                if(sourcePort == port) {
+                    continue;
+                }
+
+                port.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+            }
+        }
+        else {
+            spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
+            spdlog::debug("Type name was {}", anyMsg->type().name());
+
+            return false;
         }
     }
 

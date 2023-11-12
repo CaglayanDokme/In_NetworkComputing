@@ -41,9 +41,28 @@ bool Computer::tick()
     m_port.tick();
 
     if(m_port.hasIncoming()) {
-        auto msg = m_port.popIncoming();
+        auto anyMsg = m_port.popIncoming();
 
-        spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
+        if(anyMsg->type() == typeid(Network::Message)) {
+            const auto msg = std::any_cast<Network::Message>(anyMsg.release());
+
+            spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
+
+            if(msg->m_destinationID != m_ID) {
+                spdlog::error("Computer({}): Message delivered to wrong computer! Actual destination was #{}", m_ID, msg->m_destinationID);
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
+            auto msg = std::any_cast<Network::BroadcastMessage>(anyMsg.release());
+
+            spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg->m_sourceID);
+        }
+        else {
+            spdlog::error("Computer({}): Cannot determine the type of received message!", m_ID);
+            spdlog::debug("Type name was {}", anyMsg->type().name());
+
+            return false;
+        }
     }
 
     return true;

@@ -28,6 +28,14 @@ Aggregate::Aggregate(const std::size_t portAmount)
 
 bool Aggregate::tick()
 {
+    static const std::size_t upPortAmount = m_portAmount / 2;
+
+    // Find the up-port with the least messages in it
+    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
+    {
+        return (port1.outgoingAmount() < port2.outgoingAmount());
+    };
+
     // Advance all ports
     for(auto &port : m_ports) {
         port.tick();
@@ -42,29 +50,64 @@ bool Aggregate::tick()
             continue;
         }
 
-        auto msg = sourcePort.popIncoming();
-        spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg->m_destinationID);
+        auto anyMsg = sourcePort.popIncoming();
 
-        // Decide on direction (up or down)
-        if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
-            spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+        if(anyMsg->type() == typeid(Network::Message)) {
+            const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
 
-            auto &targetPort = search->second;
+            spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
 
-            targetPort.pushOutgoing(std::move(msg));
+            // Decide on direction (up or down)
+            if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
+                spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+
+                auto &targetPort = search->second;
+
+                targetPort.pushOutgoing(std::move(anyMsg));
+            } else { // Re-direct to up-sourcePort(s)
+                spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+                auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
+                targetPort->pushOutgoing(std::move(anyMsg));
+            }
         }
-        else { // Re-direct to up-sourcePort(s)
-            spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+        else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
+            spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
 
-            auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
-            {
-                return (port1.outgoingAmount() < port2.outgoingAmount());
-            };
+            // Decide on direction
+            if(portIdx >= (m_ports.size() / 2)) { // Coming from a down-port
+                // Re-direct to other down-ports
+                spdlog::trace("Aggregate Switch({}): Redirecting to other down-ports..", m_ID);
+                for(size_t targetPortIdx = upPortAmount; targetPortIdx < m_ports.size(); ++targetPortIdx) {
+                    if(portIdx == targetPortIdx) {
+                        continue;
+                    }
 
-            static const std::size_t upPortAmount = m_portAmount / 2;
-            auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
+                    m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                }
 
-            targetPort->pushOutgoing(std::move(msg));
+                // Re-direct to up-port with minimum messages in it
+                {
+                    spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+                    auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
+                    targetPort->pushOutgoing(std::move(anyMsg));
+                }
+            }
+            else { // Coming from an up-port
+                spdlog::trace("Aggregate Switch({}): Redirecting to all down-ports..", m_ID);
+
+                // Re-direct to all down-ports
+                for(size_t targetPortIdx = upPortAmount; targetPortIdx < m_ports.size(); ++targetPortIdx) {
+                    m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                }
+            }
+        }
+        else {
+            spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
+            spdlog::debug("Type name was {}", anyMsg->type().name());
+
+            return false;
         }
     }
 
@@ -73,12 +116,10 @@ bool Aggregate::tick()
 
 Network::Port &Aggregate::getUpPort(const size_t &portID)
 {
-    static const std::size_t upPortAmount = m_portAmount / 2;
-
-    if(portID >= upPortAmount) {
+    if(portID >= getUpPortAmount()) {
         spdlog::error("Switch doesn't have an up-port with ID {}", portID);
 
-        throw "Invalid up-port ID!";
+        throw std::invalid_argument("Invalid up-port ID!");
     }
 
     return getPort(portID);
@@ -86,13 +127,36 @@ Network::Port &Aggregate::getUpPort(const size_t &portID)
 
 Network::Port &Aggregate::getDownPort(const size_t &portID)
 {
-    static const std::size_t downPortAmount = m_portAmount / 2;
-
-    if(portID >= downPortAmount) {
+    if(portID >= getDownPortAmount()) {
         spdlog::error("Switch doesn't have a down-port with ID {}", portID);
 
-        throw "Invalid down-port ID!";
+        throw std::invalid_argument("Invalid down-port ID!");
     }
 
-    return getPort((m_portAmount / 2) + portID);
+    return getPort(getUpPortAmount() + portID);
+}
+
+Network::Port &Aggregate::getAvailableUpPort()
+{
+    // Find the up-port with the least messages in it
+    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
+    {
+        return (port1.outgoingAmount() < port2.outgoingAmount());
+    };
+
+    return *std::min_element(m_ports.begin(), m_ports.begin() + getUpPortAmount(), portSearchPolicy);
+}
+
+std::size_t Aggregate::getDownPortAmount() const
+{
+    static const std::size_t downPortAmount = m_portAmount / 2;
+
+    return downPortAmount;
+}
+
+std::size_t Aggregate::getUpPortAmount() const
+{
+    static const std::size_t upPortAmount = m_portAmount / 2;
+
+    return upPortAmount;
 }
