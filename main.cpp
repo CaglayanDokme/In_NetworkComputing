@@ -7,6 +7,7 @@
 #include "Network/Switches/Aggregate.hpp"
 #include "Network/Switches/Core.hpp"
 #include "Network/Switches/Edge.hpp"
+#include "Network/Derivations.hpp"
 #include "Computer.hpp"
 
 int main(const int argc, const char *const argv[])
@@ -71,11 +72,10 @@ int main(const int argc, const char *const argv[])
     }
 
     // Derived constants
-    const std::size_t coreSwitchAmount      = std::pow(portPerSwitch, 2) / 4;
-    const std::size_t aggregateSwitchAmount = coreSwitchAmount * 2;
-    const std::size_t edgeSwitchAmount      = aggregateSwitchAmount;
-    const std::size_t compNodeAmount        = edgeSwitchAmount * (portPerSwitch / 2);
-    const std::size_t portAmount            = compNodeAmount + (portPerSwitch * (coreSwitchAmount + aggregateSwitchAmount + edgeSwitchAmount));
+    const std::size_t coreSwitchAmount      = Network::Utilities::deriveCoreSwitchAmount(portPerSwitch);
+    const std::size_t aggregateSwitchAmount = Network::Utilities::deriveAggregateSwitchAmount(portPerSwitch);
+    const std::size_t edgeSwitchAmount      = Network::Utilities::deriveEdgeSwitchAmount(portPerSwitch);
+    const std::size_t compNodeAmount        = Network::Utilities::deriveComputingNodeAmount(portPerSwitch);
 
     // Nodes (Switch & Compute)
     std::vector<Network::Switches::Core> coreSwitches;
@@ -148,8 +148,6 @@ int main(const int argc, const char *const argv[])
             throw std::logic_error("Switch amounts doesn't match!");
         }
 
-        const size_t upPortPerSwitch = portPerSwitch / 2;
-        const size_t downPortPerSwitch = upPortPerSwitch;
         const size_t groupAmount  = portPerSwitch;
         const size_t groupSize    = aggregateSwitchAmount / groupAmount;
 

@@ -22,6 +22,7 @@ add_executable(In_NetworkComputing main.cpp
         Computer.hpp
         Network/Message.cpp
         Network/Message.hpp
+        Network/Derivations.hpp
 )
 
 target_link_libraries(In_NetworkComputing PRIVATE spdlog)
