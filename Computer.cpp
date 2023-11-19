@@ -45,7 +45,6 @@ bool Computer::tick()
 
         if(anyMsg->type() == typeid(Network::Message)) {
             const auto msg = std::any_cast<Network::Message>(anyMsg.release());
-
             spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
 
             if(msg->m_destinationID != m_ID) {
@@ -56,6 +55,9 @@ bool Computer::tick()
             auto msg = std::any_cast<Network::BroadcastMessage>(anyMsg.release());
 
             spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg->m_sourceID);
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRelease)) {
+            spdlog::debug("Computer({}): Barrier release received!", m_ID);
         }
         else {
             spdlog::error("Computer({}): Cannot determine the type of received message!", m_ID);

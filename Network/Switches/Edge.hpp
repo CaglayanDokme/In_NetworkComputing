@@ -1,7 +1,6 @@
 #pragma  once
 
 #include "ISwitch.hpp"
-#include <vector>
 #include <map>
 
 namespace Network::Switches {
@@ -55,6 +54,7 @@ namespace Network::Switches {
 
     private: /** Members **/
         std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
+        std::map<std::size_t, bool> m_barrierReleaseFlags; // Key: Up-port index, Value: True/False
 
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total
     };

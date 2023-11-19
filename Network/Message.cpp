@@ -13,3 +13,9 @@ BroadcastMessage::BroadcastMessage(const std::size_t sourceID)
 {
     // Nothing
 }
+
+BarrierRequest::BarrierRequest(const std::size_t sourceID)
+: m_sourceID(sourceID)
+{
+    // Nothing
+}

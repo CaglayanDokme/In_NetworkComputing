@@ -11,7 +11,7 @@ Aggregate::Aggregate(const std::size_t portAmount)
 
     // Calculate look-up table for re-direction to down ports
     {
-        const std::size_t downPortAmount        = m_portAmount / 2;
+        const std::size_t downPortAmount        = getDownPortAmount();
         const std::size_t assocCompNodeAmount   = downPortAmount * downPortAmount;
         const std::size_t firstCompNodeIdx      = (m_ID / downPortAmount) * assocCompNodeAmount;
 
@@ -24,12 +24,15 @@ Aggregate::Aggregate(const std::size_t portAmount)
             }
         }
     }
+
+    // Initialize barrier release flags
+    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+        m_barrierReleaseFlags.insert({upPortIdx, false});
+    }
 }
 
 bool Aggregate::tick()
 {
-    static const std::size_t upPortAmount = m_portAmount / 2;
-
     // Find the up-port with the least messages in it
     auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
     {
@@ -43,8 +46,9 @@ bool Aggregate::tick()
 
     // Check all ports for incoming messages
     // TODO Should we process one message for each port at every tick?
-    for(size_t portIdx = 0; portIdx < m_ports.size(); ++portIdx) {
-        auto &sourcePort = m_ports.at(portIdx);
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
+        const bool downPort = (sourcePortIdx >= getUpPortAmount());
+        auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
             continue;
@@ -55,7 +59,7 @@ bool Aggregate::tick()
         if(anyMsg->type() == typeid(Network::Message)) {
             const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
 
-            spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
+            spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
 
             // Decide on direction (up or down)
             if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
@@ -67,39 +71,80 @@ bool Aggregate::tick()
             } else { // Re-direct to up-sourcePort(s)
                 spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
 
-                auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
-                targetPort->pushOutgoing(std::move(anyMsg));
+                getAvailableUpPort().pushOutgoing(std::move(anyMsg));
             }
         }
         else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
-            spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
+            spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 
             // Decide on direction
-            if(portIdx >= (m_ports.size() / 2)) { // Coming from a down-port
-                // Re-direct to other down-ports
+            if(downPort) { // Coming from a down-port
                 spdlog::trace("Aggregate Switch({}): Redirecting to other down-ports..", m_ID);
-                for(size_t targetPortIdx = upPortAmount; targetPortIdx < m_ports.size(); ++targetPortIdx) {
-                    if(portIdx == targetPortIdx) {
-                        continue;
-                    }
 
-                    m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                    auto &targetPort = getDownPort(downPortIdx);
+
+                    if(sourcePort != targetPort) {
+                        targetPort.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                    }
                 }
 
                 // Re-direct to up-port with minimum messages in it
                 {
                     spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
 
-                    auto targetPort = std::min_element(m_ports.begin(), m_ports.begin() + upPortAmount, portSearchPolicy);
-                    targetPort->pushOutgoing(std::move(anyMsg));
+                    getAvailableUpPort().pushOutgoing(std::move(anyMsg));
                 }
             }
             else { // Coming from an up-port
                 spdlog::trace("Aggregate Switch({}): Redirecting to all down-ports..", m_ID);
 
                 // Re-direct to all down-ports
-                for(size_t targetPortIdx = upPortAmount; targetPortIdx < m_ports.size(); ++targetPortIdx) {
-                    m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                    getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                }
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRequest)) {
+            if(!downPort) {
+                const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
+
+                spdlog::critical("Aggregate Switch({}): Barrier request received from an up-port!", m_ID);
+                spdlog::debug("Aggregate Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
+
+                throw std::runtime_error("Barrier request in wrong direction!");
+            }
+
+            // Re-direct to all up-ports
+            for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRelease)) {
+            if(downPort) {
+                spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
+
+                throw std::runtime_error("Barrier release in wrong direction!");
+            }
+
+            // Save into flags
+            {
+                const auto upPortIdx = sourcePortIdx;
+                m_barrierReleaseFlags.at(upPortIdx) = true;
+            }
+
+            // Check for barrier release
+            {
+                if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
+                    // Send barrier release to all down-ports
+                    for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Network::BarrierRelease()));
+                    }
+
+                    // Reset all flags
+                    for(auto &entry : m_barrierReleaseFlags) {
+                        entry.second = false;
+                    }
                 }
             }
         }

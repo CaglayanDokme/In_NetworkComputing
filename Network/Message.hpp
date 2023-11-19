@@ -3,6 +3,8 @@
 #include <cstddef>
 
 namespace Network {
+    // TODO namespace Messages
+
     class Message {
     public: /** Construction **/
         Message() = delete;
@@ -30,5 +32,21 @@ namespace Network {
         struct {
             float data;
         } m_data;
+    };
+
+    class BarrierRequest {
+    public: /** Construction **/
+        BarrierRequest() = delete;
+        explicit BarrierRequest(const std::size_t sourceID);
+
+    public: /** Addressing **/
+        const std::size_t m_sourceID;
+    };
+
+    class BarrierRelease {
+    public: /** Construction **/
+        BarrierRelease() = default;
+
+        // This message doesn't require any addressing or data
     };
 };

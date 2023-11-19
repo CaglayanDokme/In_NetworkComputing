@@ -1,3 +1,4 @@
+#include "Network/Derivations.hpp"
 #include "Network/Message.hpp"
 #include "spdlog/spdlog.h"
 #include "Core.hpp"
@@ -8,6 +9,11 @@ Core::Core(const std::size_t portAmount)
 : ISwitch(nextID++, portAmount)
 {
     spdlog::trace("Created core switch with ID #{}", m_ID);
+
+    // Initialize barrier requests
+    for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx){
+        m_barrierRequestFlags.insert({compNodeIdx, false});
+    }
 }
 
 bool Core::tick()
@@ -53,6 +59,34 @@ bool Core::tick()
                 }
 
                 port.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRequest)) {
+            // Process message
+            {
+                const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
+
+                if(auto &barrierRequest = m_barrierRequestFlags.at(msg.m_sourceID); barrierRequest) {
+                    spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg.m_sourceID);
+                }
+                else {
+                    barrierRequest = true;
+                }
+            }
+
+            // Check for barrier release
+            {
+                if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                    // Send barrier release to all ports
+                    for(auto &port: m_ports) {
+                        port.pushOutgoing(std::make_unique<std::any>(Network::BarrierRelease()));
+                    }
+
+                    // Reset all requests
+                    for(auto &elem: m_barrierRequestFlags) {
+                        elem.second = false;
+                    }
+                }
             }
         }
         else {

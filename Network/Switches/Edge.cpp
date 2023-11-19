@@ -21,6 +21,11 @@ Edge::Edge(const std::size_t portAmount)
             spdlog::trace("Edge Switch({}): Mapped computing node #{} with down port #{}.", m_ID, compNodeIdx, downPortIdx);
         }
     }
+
+    // Initialize barrier release flags
+    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+        m_barrierReleaseFlags.insert({upPortIdx, false});
+    }
 }
 
 bool Edge::tick()
@@ -32,8 +37,9 @@ bool Edge::tick()
 
     // Check all ports for incoming messages
     // TODO Should we process one message for each port at every tick?
-    for(size_t portIdx = 0; portIdx < m_ports.size(); ++portIdx) {
-        auto &sourcePort = m_ports.at(portIdx);
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
+        const bool downPort = (sourcePortIdx >= getUpPortAmount());
+        auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
             continue;
@@ -44,7 +50,7 @@ bool Edge::tick()
         if(anyMsg->type() == typeid(Network::Message)) {
             const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
 
-            spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
+            spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
 
             // Decide on direction (up or down)
             if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
@@ -59,20 +65,18 @@ bool Edge::tick()
             }
         }
         else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
-            spdlog::trace("Edge Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
+            spdlog::trace("Edge Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 
             // Decide on direction
-            if(portIdx >= (m_ports.size() / 2)) { // Coming from a down-port
+            if(downPort) { // Coming from a down-port
                 spdlog::trace("Edge Switch({}): Redirecting to other down-ports..", m_ID);
 
-                for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                     auto &targetPort = getDownPort(downPortIdx);
 
-                    if(targetPort == sourcePort) {
-                        continue;
+                    if(sourcePort != targetPort) {
+                        targetPort.pushOutgoing(std::make_unique<std::any>(*anyMsg));
                     }
-
-                    targetPort.pushOutgoing(std::make_unique<std::any>(*anyMsg));
                 }
 
                 // Re-direct to up-port with minimum messages in it
@@ -87,6 +91,49 @@ bool Edge::tick()
 
                 for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                     getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                }
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRequest)) {
+            if(!downPort) {
+                const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
+
+                spdlog::critical("Edge Switch({}): Barrier request received from an up-port!", m_ID);
+                spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
+
+                throw std::runtime_error("Barrier request in wrong direction!");
+            }
+
+            // Re-direct to all up-ports
+            for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+            }
+        }
+        else if(anyMsg->type() == typeid(Network::BarrierRelease)) {
+            if(downPort) {
+                spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
+
+                throw std::runtime_error("Barrier release in wrong direction!");
+            }
+
+            // Save into flags
+            {
+                const auto upPortIdx = sourcePortIdx;
+                m_barrierReleaseFlags.at(upPortIdx) = true;
+            }
+
+            // Check for barrier release
+            {
+                if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
+                    // Send barrier release to all down-ports
+                    for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Network::BarrierRelease()));
+                    }
+
+                    // Reset all flags
+                    for(auto &entry : m_barrierReleaseFlags) {
+                        entry.second = false;
+                    }
                 }
             }
         }
