@@ -10,7 +10,7 @@ namespace PortDelays {
     static constexpr std::size_t outgoingMsg = 3;
 }
 
-bool Port::operator==(const Port &port)
+bool Port::operator==(const Port &port) const
 {
     return (this == &port);
 }

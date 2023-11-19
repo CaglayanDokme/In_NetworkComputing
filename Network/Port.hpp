@@ -4,7 +4,6 @@
 #include <deque>
 #include <cstddef>
 #include <memory>
-#include "Network/Message.hpp"
 
 namespace Network {
     class Port {
@@ -28,7 +27,8 @@ namespace Network {
          * @note Actually, no two ports can be equal.
          *       This method shall be used to check if two port references refer to the same one.
          */
-        [[nodiscard]] bool operator==(const Port &port);
+        [[nodiscard]] bool operator==(const Port &port) const;
+        [[nodiscard]] bool operator!=(const Port &port) const { return operator==(port); }
 
     public: /** Methods **/
         void tick();
