@@ -49,4 +49,25 @@ namespace Network {
 
         // This message doesn't require any addressing or data
     };
+
+    class Reduce {
+    public: /** Enumerations **/
+        enum class OpType {
+            Sum,
+            Multiply,
+            Max,
+            Min
+        };
+
+    public: /** Construction **/
+        Reduce() = delete;
+        explicit Reduce(const std::size_t destinationID, const OpType opType);
+
+    public: /** Addressing **/
+        const std::size_t m_destinationID;
+
+    public: /** Data **/
+        const OpType m_opType;
+        float m_data;
+    };
 };

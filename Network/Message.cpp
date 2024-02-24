@@ -19,3 +19,9 @@ BarrierRequest::BarrierRequest(const std::size_t sourceID)
 {
     // Nothing
 }
+
+Reduce::Reduce(const std::size_t destinationID, const OpType opType)
+: m_destinationID(destinationID), m_opType(opType)
+{
+    // Nothing
+}
