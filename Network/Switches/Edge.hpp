@@ -1,5 +1,6 @@
 #pragma  once
 
+#include "Network/Message.hpp"
 #include "ISwitch.hpp"
 #include <map>
 
@@ -53,8 +54,28 @@ namespace Network::Switches {
         [[nodiscard]] std::size_t getUpPortAmount() const;
 
     private: /** Members **/
-        std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
-        std::map<std::size_t, bool> m_barrierReleaseFlags; // Key: Up-port index, Value: True/False
+        std::map<std::size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
+        std::map<std::size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
+
+        struct {
+            struct {
+                bool bOngoing{false};                     // True if a reduce operation is ongoing
+                std::map<std::size_t, bool> receiveFlags; // Key: Down-port index, Value: True/False
+                std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
+                Reduce::OpType opType;                    // Current operation type
+                float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
+            } toUp;
+
+            struct {
+                bool bOngoing{false};                     // True if a reduce operation is ongoing
+                std::map<std::size_t, bool> receiveFlags; // Key: Port index, Value: True/False
+                std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
+                Reduce::OpType opType;                    // Current operation type
+                float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
+            } toDown;
+
+            std::size_t sameColumnPortID; // ID of the same-column up-port
+        } m_reduceStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total
     };

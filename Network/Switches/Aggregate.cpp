@@ -248,7 +248,7 @@ bool Aggregate::tick()
                                     break;
                                 }
                                 default: {
-                                    spdlog::critical("Aggregate Switch({}): Received reduce messages with unknown operation type from port #{}!", m_ID, sourcePortIdx);
+                                    spdlog::critical("Aggregate Switch({}): Received reduce message with unknown operation type from port #{}!", m_ID, sourcePortIdx);
 
                                     throw std::runtime_error("Aggregate Switch: Unknown operation type in reduce messages!");
                                 }

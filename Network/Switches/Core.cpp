@@ -10,7 +10,7 @@ Core::Core(const std::size_t portAmount)
     spdlog::trace("Created core switch with ID #{}", m_ID);
 
     // Initialize barrier requests
-    for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx){
+    for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx) {
         m_barrierRequestFlags.insert({compNodeIdx, false});
     }
 
@@ -38,7 +38,7 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(anyMsg->type() == typeid(Network::Message)) {
+        if(typeid(Network::Message) == anyMsg->type()) {
             const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
 
             spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
@@ -52,7 +52,7 @@ bool Core::tick()
                 spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
             }
         }
-        else if(anyMsg->type() == typeid(Network::BroadcastMessage)) {
+        else if(typeid(Network::BroadcastMessage) == anyMsg->type()) {
             spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
 
             // Re-direct to all other down-ports
@@ -65,7 +65,7 @@ bool Core::tick()
                 port.pushOutgoing(std::make_unique<std::any>(*anyMsg));
             }
         }
-        else if(anyMsg->type() == typeid(Network::BarrierRequest)) {
+        else if(typeid(Network::BarrierRequest) == anyMsg->type()) {
             // Process message
             {
                 const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
@@ -93,7 +93,7 @@ bool Core::tick()
                 }
             }
         }
-        else if(anyMsg->type() == typeid(Network::Reduce)) {
+        else if(typeid(Network::Reduce) == anyMsg->type()) {
             // Process message
             {
                 const auto &msg = std::any_cast<const Network::Reduce&>(*anyMsg);
