@@ -1,5 +1,6 @@
 #pragma  once
 
+#include "Network/Message.hpp"
 #include "ISwitch.hpp"
 #include <map>
 
@@ -55,6 +56,16 @@ namespace Network::Switches {
     private: /** Members **/
         std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
         std::map<std::size_t, bool> m_barrierReleaseFlags; // Key: Computation node index, Value: True/False
+
+        struct {
+            std::size_t sameColumnPortID;         // ID of the same-column down-port
+            std::map<std::size_t, bool> flags;    // Key: Port index, Value: True/False (Only the up-ports and the same-column down-port index used)
+            std::size_t destinationID;            // ID of the destined computing node (i.e. root process of reduce operation)
+            Reduce::OpType opType;                // Current operation type
+            float upPortReferenceValue;           // Reference value for up-ports (Set with first value received, all other values must be the same)
+            bool bUpPortReferenceValueSet{false}; // Indicates either the up-port reference value is set or not
+            float value;                          // Current reduction value (e.g. Sum of received values, maximum of received values)
+        } m_reduceStates; // Down-port reduce redirection states
 
         inline static std::size_t nextID = 0; // i.e. Number of aggregate switches in total
     };
