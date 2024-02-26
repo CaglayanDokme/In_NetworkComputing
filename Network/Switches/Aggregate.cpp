@@ -174,25 +174,19 @@ bool Aggregate::tick()
 
             if(bDownPort) {
                 // A reduce message can be received from the same column down-port only
-                if(sourcePortIdx == m_reduceStates.sameColumnPortID) {
+                if(sourcePortIdx != m_reduceStates.sameColumnPortID) {
                     spdlog::error("Aggregate Switch({}): Received a reduce message from an invalid down-port(#{})!", m_ID, sourcePortIdx);
 
                     throw std::runtime_error(" Received a reduce message from an invalid down-port!");
                 }
             }
 
-            const bool bOngoingRedirection = std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; });
+            const bool bOngoingRedirection = !std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; });
 
             // Decide on direction (up or down)
             auto search = m_downPortTable.find(msg.m_destinationID);
 
             if((search != m_downPortTable.end())) {
-                if(sourcePortIdx == m_reduceStates.sameColumnPortID) {
-                    spdlog::error("Aggregate Switch({}): The same column down-port cannot send reduce messages to the down-ports!", m_ID, sourcePortIdx);
-
-                    throw std::runtime_error("The same column down-port cannot send reduce messages to the down-ports!");
-                }
-
                 if(bOngoingRedirection) {
                     // Process message
                     {

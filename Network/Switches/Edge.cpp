@@ -40,13 +40,29 @@ Edge::Edge(const std::size_t portAmount)
          */
 
         // To-up
-        for(std::size_t portIdx = getUpPortAmount(); portIdx < getDownPortAmount(); ++portIdx) {
-            m_reduceStates.toUp.receiveFlags.insert({portIdx, false});
+        {
+            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+                m_reduceStates.toUp.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_reduceStates.toUp.receiveFlags.size() != getDownPortAmount()) {
+                spdlog::critical("Edge Switch({}): Amount of up-port reduce requests is not equal to down-port amount!", m_ID);
+
+                throw std::runtime_error("Invalid mapping!");
+            }
         }
 
         // To-down
-        for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
-            m_reduceStates.toDown.receiveFlags.insert({portIdx, false});
+        {
+            for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
+                m_reduceStates.toDown.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_reduceStates.toDown.receiveFlags.size() != m_portAmount) {
+                spdlog::critical("Edge Switch({}): Amount of down-port reduce requests is not equal to the total port amount!", m_ID);
+
+                throw std::runtime_error("Invalid mapping!");
+            }
         }
 
         const std::size_t aggSwitchPerGroup = getDownPortAmount();
@@ -168,7 +184,7 @@ bool Edge::tick()
             const auto &msg = std::any_cast<const Network::Reduce&>(*anyMsg);
 
             // Decide on direction
-            const bool bToUp = (m_downPortTable.find(msg.m_destinationID) != m_downPortTable.end());;
+            const bool bToUp = (m_downPortTable.find(msg.m_destinationID) == m_downPortTable.end());;
 
             if(bToUp) {
                 if(!downPort) {
@@ -335,7 +351,7 @@ bool Edge::tick()
                     }
 
                     // Check if all up-ports and all other down-ports have sent message
-                    const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; });
+                    const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });
 
                     if((state.receiveFlags.size() - 1) == rxCount) {
                         auto txMsg = Network::Reduce(state.destinationID, state.opType);
