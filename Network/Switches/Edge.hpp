@@ -62,7 +62,7 @@ namespace Network::Switches {
                 bool bOngoing{false};                     // True if a reduce operation is ongoing
                 std::map<std::size_t, bool> receiveFlags; // Key: Down-port index, Value: True/False
                 std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
-                Reduce::OpType opType;                    // Current operation type
+                Messages::Reduce::OpType opType;          // Current operation type
                 float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp;
 
@@ -70,7 +70,7 @@ namespace Network::Switches {
                 bool bOngoing{false};                     // True if a reduce operation is ongoing
                 std::map<std::size_t, bool> receiveFlags; // Key: Port index, Value: True/False
                 std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
-                Reduce::OpType opType;                    // Current operation type
+                Messages::Reduce::OpType opType;          // Current operation type
                 float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toDown;
 

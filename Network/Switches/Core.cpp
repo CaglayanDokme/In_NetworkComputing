@@ -38,8 +38,8 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(typeid(Network::Message) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
+        if(typeid(Messages::Message) == anyMsg->type()) {
+            const auto &msg = std::any_cast<const Messages::Message&>(*anyMsg);
 
             spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
 
@@ -52,7 +52,7 @@ bool Core::tick()
                 spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
             }
         }
-        else if(typeid(Network::BroadcastMessage) == anyMsg->type()) {
+        else if(typeid(Messages::BroadcastMessage) == anyMsg->type()) {
             spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
 
             // Re-direct to all other down-ports
@@ -65,10 +65,10 @@ bool Core::tick()
                 port.pushOutgoing(std::make_unique<std::any>(*anyMsg));
             }
         }
-        else if(typeid(Network::BarrierRequest) == anyMsg->type()) {
+        else if(typeid(Messages::BarrierRequest) == anyMsg->type()) {
             // Process message
             {
-                const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
+                const auto &msg = std::any_cast<const Messages::BarrierRequest&>(*anyMsg);
 
                 if(auto &barrierRequest = m_barrierRequestFlags.at(msg.m_sourceID); barrierRequest) {
                     spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg.m_sourceID);
@@ -83,7 +83,7 @@ bool Core::tick()
                 if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
                     // Send barrier release to all ports
                     for(auto &port: m_ports) {
-                        port.pushOutgoing(std::make_unique<std::any>(Network::BarrierRelease()));
+                        port.pushOutgoing(std::make_unique<std::any>(Messages::BarrierRelease()));
                     }
 
                     // Reset all requests
@@ -93,10 +93,10 @@ bool Core::tick()
                 }
             }
         }
-        else if(typeid(Network::Reduce) == anyMsg->type()) {
+        else if(typeid(Messages::Reduce) == anyMsg->type()) {
             // Process message
             {
-                const auto &msg = std::any_cast<const Network::Reduce&>(*anyMsg);
+                const auto &msg = std::any_cast<const Messages::Reduce&>(*anyMsg);
 
                 spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg.m_destinationID);
 
@@ -123,22 +123,22 @@ bool Core::tick()
                     m_reduceStates.flags.at(portIdx) = true;
 
                     switch(m_reduceStates.opType) {
-                        case Network::Reduce::OpType::Max: {
+                        case Messages::Reduce::OpType::Max: {
                             m_reduceStates.value = std::max(m_reduceStates.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Min: {
+                        case Messages::Reduce::OpType::Min: {
                             m_reduceStates.value = std::min(m_reduceStates.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Sum: {
+                        case Messages::Reduce::OpType::Sum: {
                             m_reduceStates.value += msg.m_data;
 
                             break;
                         }
-                        case Network::Reduce::OpType::Multiply: {
+                        case Messages::Reduce::OpType::Multiply: {
                             m_reduceStates.value *= msg.m_data;
 
                             break;
@@ -165,7 +165,7 @@ bool Core::tick()
                         throw std::runtime_error("Core Switch: Target port was actually a source port!");
                     }
 
-                    auto msg = Network::Reduce(m_reduceStates.destinationID, m_reduceStates.opType);
+                    auto msg = Messages::Reduce(m_reduceStates.destinationID, m_reduceStates.opType);
                     msg.m_data = m_reduceStates.value;
 
                     m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(msg));

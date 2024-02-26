@@ -1,6 +1,5 @@
 #include "Edge.hpp"
 #include "spdlog/spdlog.h"
-#include "Network/Message.hpp"
 
 using namespace Network::Switches;
 
@@ -90,8 +89,8 @@ bool Edge::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(typeid(Network::Message) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Network::Message&>(*anyMsg);
+        if(typeid(Messages::Message) == anyMsg->type()) {
+            const auto &msg = std::any_cast<const Messages::Message&>(*anyMsg);
 
             spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
 
@@ -107,7 +106,7 @@ bool Edge::tick()
                 getAvailableUpPort().pushOutgoing(std::move(anyMsg));
             }
         }
-        else if(typeid(Network::BroadcastMessage) == anyMsg->type()) {
+        else if(typeid(Messages::BroadcastMessage) == anyMsg->type()) {
             spdlog::trace("Edge Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 
             // Decide on direction
@@ -137,9 +136,9 @@ bool Edge::tick()
                 }
             }
         }
-        else if(typeid(Network::BarrierRequest) == anyMsg->type()) {
+        else if(typeid(Messages::BarrierRequest) == anyMsg->type()) {
             if(!downPort) {
-                const auto &msg = std::any_cast<const Network::BarrierRequest&>(*anyMsg);
+                const auto &msg = std::any_cast<const Messages::BarrierRequest&>(*anyMsg);
 
                 spdlog::critical("Edge Switch({}): Barrier request received from an up-port!", m_ID);
                 spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
@@ -152,7 +151,7 @@ bool Edge::tick()
                 getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
             }
         }
-        else if(typeid(Network::BarrierRelease) == anyMsg->type()) {
+        else if(typeid(Messages::BarrierRelease) == anyMsg->type()) {
             if(downPort) {
                 spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
 
@@ -170,7 +169,7 @@ bool Edge::tick()
                 if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
                     // Send barrier release to all down-ports
                     for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Network::BarrierRelease()));
+                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Messages::BarrierRelease()));
                     }
 
                     // Reset all flags
@@ -180,11 +179,11 @@ bool Edge::tick()
                 }
             }
         }
-        else if(typeid(Network::Reduce) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Network::Reduce&>(*anyMsg);
+        else if(typeid(Messages::Reduce) == anyMsg->type()) {
+            const auto &msg = std::any_cast<const Messages::Reduce&>(*anyMsg);
 
             // Decide on direction
-            const bool bToUp = (m_downPortTable.find(msg.m_destinationID) == m_downPortTable.end());;
+            const bool bToUp = (m_downPortTable.find(msg.m_destinationID) == m_downPortTable.end());
 
             if(bToUp) {
                 if(!downPort) {
@@ -233,22 +232,22 @@ bool Edge::tick()
                     state.receiveFlags.at(sourcePortIdx) = true;
 
                     switch(state.opType) {
-                        case Network::Reduce::OpType::Max: {
+                        case Messages::Reduce::OpType::Max: {
                             state.value = std::max(state.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Min: {
+                        case Messages::Reduce::OpType::Min: {
                             state.value = std::min(state.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Sum: {
+                        case Messages::Reduce::OpType::Sum: {
                             state.value += msg.m_data;
 
                             break;
                         }
-                        case Network::Reduce::OpType::Multiply: {
+                        case Messages::Reduce::OpType::Multiply: {
                             state.value *= msg.m_data;
 
                             break;
@@ -263,7 +262,7 @@ bool Edge::tick()
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                         // Send reduced message to the same column up-port
-                        auto txMsg = Network::Reduce(state.destinationID, state.opType);
+                        auto txMsg = Messages::Reduce(state.destinationID, state.opType);
                         txMsg.m_data = state.value;
 
                         getPort(m_reduceStates.sameColumnPortID).pushOutgoing(std::make_unique<std::any>(txMsg));
@@ -323,22 +322,22 @@ bool Edge::tick()
                     state.receiveFlags.at(sourcePortIdx) = true;
 
                     switch(state.opType) {
-                        case Network::Reduce::OpType::Max: {
+                        case Messages::Reduce::OpType::Max: {
                             state.value = std::max(state.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Min: {
+                        case Messages::Reduce::OpType::Min: {
                             state.value = std::min(state.value, msg.m_data);
 
                             break;
                         }
-                        case Network::Reduce::OpType::Sum: {
+                        case Messages::Reduce::OpType::Sum: {
                             state.value += msg.m_data;
 
                             break;
                         }
-                        case Network::Reduce::OpType::Multiply: {
+                        case Messages::Reduce::OpType::Multiply: {
                             state.value *= msg.m_data;
 
                             break;
@@ -354,7 +353,7 @@ bool Edge::tick()
                     const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });
 
                     if((state.receiveFlags.size() - 1) == rxCount) {
-                        auto txMsg = Network::Reduce(state.destinationID, state.opType);
+                        auto txMsg = Messages::Reduce(state.destinationID, state.opType);
                         txMsg.m_data = state.value;
 
                         m_downPortTable.at(state.destinationID).pushOutgoing(std::make_unique<std::any>(txMsg));

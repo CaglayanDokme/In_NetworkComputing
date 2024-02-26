@@ -43,25 +43,25 @@ bool Computer::tick()
     if(m_port.hasIncoming()) {
         auto anyMsg = m_port.popIncoming();
 
-        if(typeid(Network::Message) == anyMsg->type()) {
-            const auto msg = std::any_cast<Network::Message>(anyMsg.release());
+        if(typeid(Network::Messages::Message) == anyMsg->type()) {
+            const auto msg = std::any_cast<Network::Messages::Message>(anyMsg.release());
             spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
 
             if(msg->m_destinationID != m_ID) {
                 spdlog::error("Computer({}): Message delivered to wrong computer! Actual destination was #{}", m_ID, msg->m_destinationID);
             }
         }
-        else if(typeid(Network::BroadcastMessage) == anyMsg->type()) {
-            auto msg = std::any_cast<Network::BroadcastMessage>(anyMsg.release());
+        else if(typeid(Network::Messages::BroadcastMessage) == anyMsg->type()) {
+            auto msg = std::any_cast<Network::Messages::BroadcastMessage>(anyMsg.release());
 
             spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg->m_sourceID);
         }
-        else if(typeid(Network::BarrierRelease) == anyMsg->type()) {
+        else if(typeid(Network::Messages::BarrierRelease) == anyMsg->type()) {
             spdlog::debug("Computer({}): Barrier release received!", m_ID);
         }
-        else if(typeid(Network::Reduce) == anyMsg->type()) {
+        else if(typeid(Network::Messages::Reduce) == anyMsg->type()) {
             spdlog::info("Computer({}): Received reduce message!", m_ID);
-            spdlog::info("Computer({}): Reduced data: {}", m_ID, std::any_cast<Network::Reduce>(anyMsg.release())->m_data);
+            spdlog::info("Computer({}): Reduced data: {}", m_ID, std::any_cast<Network::Messages::Reduce>(anyMsg.release())->m_data);
         }
         else {
             spdlog::error("Computer({}): Cannot determine the type of received message!", m_ID);

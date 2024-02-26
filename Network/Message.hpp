@@ -2,9 +2,7 @@
 
 #include <cstddef>
 
-namespace Network {
-    // TODO namespace Messages
-
+namespace Network::Messages {
     class Message {
     public: /** Construction **/
         Message() = delete;
