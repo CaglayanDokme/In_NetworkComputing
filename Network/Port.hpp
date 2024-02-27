@@ -1,12 +1,15 @@
 #pragma  once
 
-#include <any>
+#include "Message.hpp"
 #include <deque>
 #include <cstddef>
 #include <memory>
 
 namespace Network {
     class Port {
+    public: /** Aliases **/
+        using UniqueMsg = std::unique_ptr<Messages::BaseMessage>;
+
     public: /** Construction **/
         Port() = default;
 
@@ -52,7 +55,7 @@ namespace Network {
          * @brief Push a message to port's outgoing queue
          * @param msg A unique pointer to the outgoing message
          */
-        void pushOutgoing(std::unique_ptr<std::any> msg);
+        void pushOutgoing(UniqueMsg msg);
 
         /**
          * @brief  Get the amount of outgoing messages
@@ -64,7 +67,7 @@ namespace Network {
          * @brief Pop an incoming message from the port
          * @return A unique pointer to the incoming message
          */
-        [[nodiscard]] std::unique_ptr<std::any> popIncoming();
+        [[nodiscard]] UniqueMsg popIncoming();
 
         /**
          * @brief Check if the port has a ready-to-fetch incoming message
@@ -79,15 +82,15 @@ namespace Network {
          *
          * @note This method can only be called from another port which has an outgoing message
          */
-        void pushIncoming(std::unique_ptr<std::any> msg);
+        void pushIncoming(UniqueMsg msg);
 
     private: /** Members **/
         Port *m_pRemotePort{nullptr};
 
         struct st_Msg {
-            st_Msg(std::unique_ptr<std::any> data, const std::size_t &delay);
+            st_Msg(UniqueMsg data, const std::size_t &delay);
 
-            std::unique_ptr<std::any> data;
+            UniqueMsg data;
             std::size_t remaining;  // Remaining ticks to fetch
         };
 

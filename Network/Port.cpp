@@ -15,18 +15,18 @@ bool Port::operator==(const Port &port) const
     return (this == &port);
 }
 
-Port::st_Msg::st_Msg(std::unique_ptr<std::any> data, const size_t &delay)
+Port::st_Msg::st_Msg(UniqueMsg data, const size_t &delay)
 : data(std::move(data)), remaining(delay)
 {
     // Nothing
 }
 
-void Port::pushIncoming(std::unique_ptr<std::any> msg)
+void Port::pushIncoming(UniqueMsg msg)
 {
     m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
 }
 
-void Port::pushOutgoing(std::unique_ptr<std::any> msg)
+void Port::pushOutgoing(UniqueMsg msg)
 {
     m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
 }
@@ -90,7 +90,7 @@ bool Port::hasIncoming() const
     return (0 == m_incoming.front().remaining);
 }
 
-std::unique_ptr<std::any> Port::popIncoming()
+Port::UniqueMsg Port::popIncoming()
 {
     if(!hasIncoming()) {
         spdlog::error("No incoming message, potential undefined behaviour!");

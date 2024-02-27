@@ -89,25 +89,28 @@ bool Edge::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(typeid(Messages::Message) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Messages::Message&>(*anyMsg);
+        if(Messages::e_Type::Message == anyMsg->type()) {
+            const auto msg = static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
-            spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
+            spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
 
             // Decide on direction (up or down)
-            if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
+            if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
                 spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
 
                 auto &targetPort = search->second;
                 targetPort.pushOutgoing(std::move(anyMsg));
-            } else { // Re-direct to an up-port
+            }
+            else { // Re-direct to an up-port
                 spdlog::trace("Edge Switch({}): Redirecting to an up-port..", m_ID);
 
                 getAvailableUpPort().pushOutgoing(std::move(anyMsg));
             }
         }
-        else if(typeid(Messages::BroadcastMessage) == anyMsg->type()) {
+        else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
             spdlog::trace("Edge Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
+
+            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
 
             // Decide on direction
             if(downPort) { // Coming from a down-port
@@ -117,7 +120,8 @@ bool Edge::tick()
                     auto &targetPort = getDownPort(downPortIdx);
 
                     if(sourcePort != targetPort) {
-                        targetPort.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                        auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                        targetPort.pushOutgoing(std::move(uniqueMsg));
                     }
                 }
 
@@ -132,14 +136,15 @@ bool Edge::tick()
                 spdlog::trace("Edge Switch({}): Redirecting to all down-ports..", m_ID);
 
                 for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                    getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                    auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                    getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
                 }
             }
         }
-        else if(typeid(Messages::BarrierRequest) == anyMsg->type()) {
-            if(!downPort) {
-                const auto &msg = std::any_cast<const Messages::BarrierRequest&>(*anyMsg);
+        else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
 
+            if(!downPort) {
                 spdlog::critical("Edge Switch({}): Barrier request received from an up-port!", m_ID);
                 spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
 
@@ -148,10 +153,11 @@ bool Edge::tick()
 
             // Re-direct to all up-ports
             for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                auto uniqueMsg = std::make_unique<Network::Messages::BarrierRequest>(msg);
+                getUpPort(upPortIdx).pushOutgoing(std::move(uniqueMsg));
             }
         }
-        else if(typeid(Messages::BarrierRelease) == anyMsg->type()) {
+        else if(Messages::e_Type::BarrierRelease == anyMsg->type()) {
             if(downPort) {
                 spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
 
@@ -169,7 +175,7 @@ bool Edge::tick()
                 if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
                     // Send barrier release to all down-ports
                     for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Messages::BarrierRelease()));
+                        getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
                     }
 
                     // Reset all flags
@@ -179,8 +185,8 @@ bool Edge::tick()
                 }
             }
         }
-        else if(typeid(Messages::Reduce) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Messages::Reduce&>(*anyMsg);
+        else if(Messages::e_Type::Reduce == anyMsg->type()) {
+            const auto &msg = static_cast<const Messages::Reduce &>(*anyMsg.release());
 
             // Decide on direction
             const bool bToUp = (m_downPortTable.find(msg.m_destinationID) == m_downPortTable.end());
@@ -262,10 +268,10 @@ bool Edge::tick()
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                         // Send reduced message to the same column up-port
-                        auto txMsg = Messages::Reduce(state.destinationID, state.opType);
-                        txMsg.m_data = state.value;
+                        auto txMsg = std::make_unique<Messages::Reduce>(state.destinationID, state.opType);
+                        txMsg->m_data = state.value;
 
-                        getPort(m_reduceStates.sameColumnPortID).pushOutgoing(std::make_unique<std::any>(txMsg));
+                        getPort(m_reduceStates.sameColumnPortID).pushOutgoing(std::move(txMsg));
 
                         // Reset to-up state
                         state.bOngoing = false;
@@ -353,10 +359,10 @@ bool Edge::tick()
                     const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });
 
                     if((state.receiveFlags.size() - 1) == rxCount) {
-                        auto txMsg = Messages::Reduce(state.destinationID, state.opType);
-                        txMsg.m_data = state.value;
+                        auto txMsg = std::make_unique<Messages::Reduce>(state.destinationID, state.opType);
+                        txMsg->m_data = state.value;
 
-                        m_downPortTable.at(state.destinationID).pushOutgoing(std::make_unique<std::any>(txMsg));
+                        m_downPortTable.at(state.destinationID).pushOutgoing(std::move(txMsg));
 
                         // Reset to-down state
                         state.bOngoing = false;
@@ -370,7 +376,7 @@ bool Edge::tick()
         }
         else {
             spdlog::error("Edge Switch({}): Cannot determine the type of received message!", m_ID);
-            spdlog::debug("Type name was {}", anyMsg->type().name());
+            spdlog::debug("Type name was {}", anyMsg->typeToString());
 
             return false;
         }

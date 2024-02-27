@@ -43,29 +43,32 @@ bool Computer::tick()
     if(m_port.hasIncoming()) {
         auto anyMsg = m_port.popIncoming();
 
-        if(typeid(Network::Messages::Message) == anyMsg->type()) {
-            const auto msg = std::any_cast<Network::Messages::Message>(anyMsg.release());
-            spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg->m_sourceID);
+        if(Network::Messages::e_Type::Message == anyMsg->type()) {
+            const auto &msg = *static_cast<const Network::Messages::DirectMessage *>(anyMsg.release());
 
-            if(msg->m_destinationID != m_ID) {
-                spdlog::error("Computer({}): Message delivered to wrong computer! Actual destination was #{}", m_ID, msg->m_destinationID);
+            spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg.m_sourceID);
+
+            if(msg.m_destinationID != m_ID) {
+                spdlog::error("Computer({}): Message delivered to wrong computer! Actual destination was #{}", m_ID, msg.m_destinationID);
             }
         }
-        else if(typeid(Network::Messages::BroadcastMessage) == anyMsg->type()) {
-            auto msg = std::any_cast<Network::Messages::BroadcastMessage>(anyMsg.release());
+        else if(Network::Messages::e_Type::BroadcastMessage == anyMsg->type()) {
+            const auto &msg = *static_cast<const Network::Messages::BroadcastMessage *>(anyMsg.release());
 
-            spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg->m_sourceID);
+            spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg.m_sourceID);
         }
-        else if(typeid(Network::Messages::BarrierRelease) == anyMsg->type()) {
+        else if(Network::Messages::e_Type::BarrierRelease == anyMsg->type()) {
             spdlog::debug("Computer({}): Barrier release received!", m_ID);
         }
-        else if(typeid(Network::Messages::Reduce) == anyMsg->type()) {
+        else if(Network::Messages::e_Type::Reduce == anyMsg->type()) {
+            const auto &msg = *static_cast<const Network::Messages::Reduce *>(anyMsg.release());
+
             spdlog::info("Computer({}): Received reduce message!", m_ID);
-            spdlog::info("Computer({}): Reduced data: {}", m_ID, std::any_cast<Network::Messages::Reduce>(anyMsg.release())->m_data);
+            spdlog::info("Computer({}): Reduced data: {}", m_ID, msg.m_data);
         }
         else {
             spdlog::error("Computer({}): Cannot determine the type of received message!", m_ID);
-            spdlog::debug("Type name was {}", anyMsg->type().name());
+            spdlog::debug("Type name was {}", anyMsg->typeToString());
 
             return false;
         }

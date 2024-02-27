@@ -1,24 +1,47 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 namespace Network::Messages {
-    class Message {
+    enum class e_Type {
+        Message,
+        BroadcastMessage,
+        BarrierRequest,
+        BarrierRelease,
+        Reduce
+    };
+
+    [[nodiscard]] std::string toString(const e_Type eType);
+
+    class BaseMessage {
+    protected: /** Construction **/
+        BaseMessage() = delete;
+        BaseMessage(const e_Type eType);
+
+    public: /** Methods **/
+        [[nodiscard]] e_Type type() const { return m_eType; }
+
+        [[nodiscard]] std::string typeToString() const;
+
+    protected:
+        const e_Type m_eType;
+    };
+
+    class DirectMessage : public BaseMessage {
     public: /** Construction **/
-        Message() = delete;
-        explicit Message(const std::size_t sourceID, const std::size_t destinationID);
+        DirectMessage() = delete;
+        explicit DirectMessage(const std::size_t sourceID, const std::size_t destinationID);
 
     public: /** Addressing **/
         const std::size_t m_sourceID;
         const std::size_t m_destinationID;
 
     public: /** Data **/
-        struct {
-            float data;
-        } m_data;
+        float m_data;
     };
 
-    class BroadcastMessage {
+    class BroadcastMessage : public BaseMessage {
     public: /** Construction **/
         BroadcastMessage() = delete;
         explicit BroadcastMessage(const std::size_t sourceID);
@@ -27,12 +50,10 @@ namespace Network::Messages {
         const std::size_t m_sourceID;
 
     public: /** Data **/
-        struct {
-            float data;
-        } m_data;
+        float data;
     };
 
-    class BarrierRequest {
+    class BarrierRequest : public BaseMessage {
     public: /** Construction **/
         BarrierRequest() = delete;
         explicit BarrierRequest(const std::size_t sourceID);
@@ -41,14 +62,14 @@ namespace Network::Messages {
         const std::size_t m_sourceID;
     };
 
-    class BarrierRelease {
+    class BarrierRelease : public BaseMessage {
     public: /** Construction **/
-        BarrierRelease() = default;
+        BarrierRelease();
 
         // This message doesn't require any addressing or data
     };
 
-    class Reduce {
+    class Reduce : public BaseMessage {
     public: /** Enumerations **/
         enum class OpType {
             Sum,

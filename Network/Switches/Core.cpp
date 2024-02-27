@@ -38,8 +38,8 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(typeid(Messages::Message) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Messages::Message&>(*anyMsg);
+        if(Messages::e_Type::Message == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
             spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
 
@@ -52,24 +52,26 @@ bool Core::tick()
                 spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
             }
         }
-        else if(typeid(Messages::BroadcastMessage) == anyMsg->type()) {
+        else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
             spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
+
+            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
 
             // Re-direct to all other down-ports
             for(auto &port : m_ports) {
-
                 if(sourcePort == port) {
                     continue;
                 }
 
-                port.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                port.pushOutgoing(std::move(uniqueMsg));
             }
         }
-        else if(typeid(Messages::BarrierRequest) == anyMsg->type()) {
+        else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
+
             // Process message
             {
-                const auto &msg = std::any_cast<const Messages::BarrierRequest&>(*anyMsg);
-
                 if(auto &barrierRequest = m_barrierRequestFlags.at(msg.m_sourceID); barrierRequest) {
                     spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg.m_sourceID);
                 }
@@ -83,7 +85,7 @@ bool Core::tick()
                 if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
                     // Send barrier release to all ports
                     for(auto &port: m_ports) {
-                        port.pushOutgoing(std::make_unique<std::any>(Messages::BarrierRelease()));
+                        port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());
                     }
 
                     // Reset all requests
@@ -93,10 +95,10 @@ bool Core::tick()
                 }
             }
         }
-        else if(typeid(Messages::Reduce) == anyMsg->type()) {
+        else if(Messages::e_Type::Reduce == anyMsg->type()) {
             // Process message
             {
-                const auto &msg = std::any_cast<const Messages::Reduce&>(*anyMsg);
+                const auto &msg = static_cast<const Messages::Reduce &>(*anyMsg.release());
 
                 spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg.m_destinationID);
 
@@ -165,10 +167,10 @@ bool Core::tick()
                         throw std::runtime_error("Core Switch: Target port was actually a source port!");
                     }
 
-                    auto msg = Messages::Reduce(m_reduceStates.destinationID, m_reduceStates.opType);
-                    msg.m_data = m_reduceStates.value;
+                    auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
+                    msg->m_data = m_reduceStates.value;
 
-                    m_ports.at(targetPortIdx).pushOutgoing(std::make_unique<std::any>(msg));
+                    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 
                     std::transform(m_reduceStates.flags.begin(),
                                    m_reduceStates.flags.end(),
@@ -185,7 +187,7 @@ bool Core::tick()
         }
         else {
             spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
-            spdlog::debug("Type name was {}", anyMsg->type().name());
+            spdlog::debug("Type name was {}", anyMsg->typeToString());
 
             return false;
         }

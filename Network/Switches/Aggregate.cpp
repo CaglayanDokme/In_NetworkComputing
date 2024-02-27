@@ -69,8 +69,8 @@ bool Aggregate::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(typeid(Messages::Message) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Messages::Message&>(*anyMsg);
+        if(Messages::e_Type::Message == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
             spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
 
@@ -88,8 +88,10 @@ bool Aggregate::tick()
                 getAvailableUpPort().pushOutgoing(std::move(anyMsg));
             }
         }
-        else if(typeid(Messages::BroadcastMessage) == anyMsg->type()) {
+        else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
             spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
+
+            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
 
             // Decide on direction
             if(bDownPort) { // Coming from a down-port
@@ -99,7 +101,8 @@ bool Aggregate::tick()
                     auto &targetPort = getDownPort(downPortIdx);
 
                     if(sourcePort != targetPort) {
-                        targetPort.pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                        auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                        targetPort.pushOutgoing(std::move(uniqueMsg));
                     }
                 }
 
@@ -115,14 +118,15 @@ bool Aggregate::tick()
 
                 // Re-direct to all down-ports
                 for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                    getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                    auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                    getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
                 }
             }
         }
-        else if(typeid(Messages::BarrierRequest) == anyMsg->type()) {
-            if(!bDownPort) {
-                const auto &msg = std::any_cast<const Messages::BarrierRequest&>(*anyMsg);
+        else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
 
+            if(!bDownPort) {
                 spdlog::critical("Aggregate Switch({}): Barrier request received from an up-port!", m_ID);
                 spdlog::debug("Aggregate Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
 
@@ -131,10 +135,11 @@ bool Aggregate::tick()
 
             // Re-direct to all up-ports
             for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(*anyMsg));
+                auto uniqueMsg = std::make_unique<Network::Messages::BarrierRequest>(msg);
+                getUpPort(upPortIdx).pushOutgoing(std::move(uniqueMsg));
             }
         }
-        else if(typeid(Messages::BarrierRelease) == anyMsg->type()) {
+        else if(Messages::e_Type::BarrierRelease == anyMsg->type()) {
             if(bDownPort) {
                 spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
 
@@ -152,7 +157,7 @@ bool Aggregate::tick()
                 if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
                     // Send barrier release to all down-ports
                     for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                        getDownPort(downPortIdx).pushOutgoing(std::make_unique<std::any>(Messages::BarrierRelease()));
+                        getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
                     }
 
                     // Reset all flags
@@ -162,8 +167,8 @@ bool Aggregate::tick()
                 }
             }
         }
-        else if(typeid(Messages::Reduce) == anyMsg->type()) {
-            const auto &msg = std::any_cast<const Messages::Reduce&>(*anyMsg);
+        else if(Messages::e_Type::Reduce == anyMsg->type()) {
+            const auto &msg = static_cast<const Messages::Reduce &>(*anyMsg.release());
 
             // Check if source port exists in source table for reduction messages
             if(std::find_if(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [sourcePortIdx](const auto& entry) { return entry.first == sourcePortIdx; }) == m_reduceStates.flags.cend()) {
@@ -269,10 +274,10 @@ bool Aggregate::tick()
                             if(getUpPortAmount() == rxCount) {
                                 spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports! Re-directing..", m_ID);
 
-                                auto msg = Messages::Reduce(m_reduceStates.destinationID, m_reduceStates.opType);
-                                msg.m_data = m_reduceStates.value;
+                                auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
+                                msg->m_data = m_reduceStates.value;
 
-                                destinationPort.pushOutgoing(std::make_unique<std::any>(msg));
+                                destinationPort.pushOutgoing(std::move(msg));
 
                                 std::transform(m_reduceStates.flags.begin(),
                                                m_reduceStates.flags.end(),
@@ -285,10 +290,10 @@ bool Aggregate::tick()
                             if(m_reduceStates.flags.size() == rxCount) { // i.e. getUpPortAmount() + 1
                                 spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports and the same column down-port! Re-directing..", m_ID);
 
-                                auto msg = Messages::Reduce(m_reduceStates.destinationID, m_reduceStates.opType);
-                                msg.m_data = m_reduceStates.value;
+                                auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
+                                msg->m_data = m_reduceStates.value;
 
-                                destinationPort.pushOutgoing(std::make_unique<std::any>(msg));
+                                destinationPort.pushOutgoing(std::move(msg));
 
                                 std::transform(m_reduceStates.flags.begin(),
                                                m_reduceStates.flags.end(),
@@ -321,13 +326,13 @@ bool Aggregate::tick()
 
                 // Re-direct to all up-ports
                 for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                    getUpPort(upPortIdx).pushOutgoing(std::make_unique<std::any>(msg));
+                    getUpPort(upPortIdx).pushOutgoing(std::make_unique<Messages::Reduce>(msg));
                 }
             }
         }
         else {
             spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
-            spdlog::debug("Type name was {}", anyMsg->type().name());
+            spdlog::debug("Type name was {}", anyMsg->typeToString());
 
             return false;
         }
