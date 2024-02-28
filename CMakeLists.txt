@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/source)
-add_subdirectory(cxxopts)
 
 set(SOURCES
     source/main.cpp
@@ -20,6 +19,7 @@ set(SOURCES
 )
 
 set(HEADERS
+    source/cxxopts.hpp
     source/Network/Port.hpp
     source/Network/Switches/Core.hpp
     source/Network/Switches/Aggregate.hpp
@@ -34,4 +34,3 @@ find_package(spdlog REQUIRED)
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE spdlog)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE cxxopts)
