@@ -40,7 +40,7 @@ bool Computer::tick()
     // Advance port
     m_port.tick();
 
-    if(m_port.hasIncoming()) {
+        if(m_port.hasIncoming()) {
         auto anyMsg = m_port.popIncoming();
 
         if(Network::Messages::e_Type::Message == anyMsg->type()) {
@@ -64,6 +64,12 @@ bool Computer::tick()
             const auto &msg = *static_cast<const Network::Messages::Reduce *>(anyMsg.release());
 
             spdlog::info("Computer({}): Received reduce message!", m_ID);
+            spdlog::info("Computer({}): Reduced data: {}", m_ID, msg.m_data);
+        }
+        else if(Network::Messages::e_Type::ReduceAll == anyMsg->type()) {
+            const auto &msg = *static_cast<const Network::Messages::ReduceAll *>(anyMsg.release());
+
+            spdlog::info("Computer({}): Received reduce-all message!", m_ID);
             spdlog::info("Computer({}): Reduced data: {}", m_ID, msg.m_data);
         }
         else {
