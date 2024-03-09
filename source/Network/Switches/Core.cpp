@@ -199,13 +199,12 @@ bool Core::tick()
 
                 // Check if this is the first reduce-all message
                 if(!m_reduceAllStates.bOngoing) {
+                    m_reduceAllStates.bOngoing = true;
                     m_reduceAllStates.opType = msg.m_opType;
                     m_reduceAllStates.value  = msg.m_data;
                     m_reduceAllStates.flags.at(portIdx) = true;
                 }
                 else {
-                    m_reduceAllStates.bOngoing = true;
-
                     if(m_reduceAllStates.flags.at(portIdx)) {
                         spdlog::critical("Core Switch({}): Received multiple reduce-all messages from port #{}!", m_ID, portIdx);
 
