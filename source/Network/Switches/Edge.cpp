@@ -121,7 +121,7 @@ bool Edge::tick()
     // Check all ports for incoming messages
     // TODO Should we process one message for each port at every tick?
     for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
-        const bool downPort = (sourcePortIdx >= getUpPortAmount());
+        const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
         auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
@@ -154,7 +154,7 @@ bool Edge::tick()
             const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
 
             // Decide on direction
-            if(downPort) { // Coming from a down-port
+            if(bDownPort) { // Coming from a down-port
                 spdlog::trace("Edge Switch({}): Redirecting to other down-ports..", m_ID);
 
                 for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
@@ -185,7 +185,7 @@ bool Edge::tick()
         else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
 
-            if(!downPort) {
+            if(!bDownPort) {
                 spdlog::critical("Edge Switch({}): Barrier request received from an up-port!", m_ID);
                 spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg.m_sourceID);
 
@@ -199,7 +199,7 @@ bool Edge::tick()
             }
         }
         else if(Messages::e_Type::BarrierRelease == anyMsg->type()) {
-            if(downPort) {
+            if(bDownPort) {
                 spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
 
                 throw std::runtime_error("Barrier release in wrong direction!");
@@ -233,7 +233,7 @@ bool Edge::tick()
             const bool bToUp = (m_downPortTable.find(msg.m_destinationID) == m_downPortTable.end());
 
             if(bToUp) {
-                if(!downPort) {
+                if(!bDownPort) {
                     spdlog::critical("Edge Switch({}): Received a reduce message destined to up and from an up-port!", m_ID);
 
                     throw std::runtime_error("Edge Switch: Received a reduce message destined to up and from an up-port!");
@@ -418,7 +418,7 @@ bool Edge::tick()
         else if(Messages::e_Type::ReduceAll == anyMsg->type()) {
             const auto &msg = static_cast<const Messages::ReduceAll &>(*anyMsg.release());
 
-            if(downPort) {
+            if(bDownPort) {
                 auto &state = m_reduceAllStates.toUp;
 
                 // Check if to-down has an ongoing reduce-all operation

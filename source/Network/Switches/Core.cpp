@@ -18,6 +18,11 @@ Core::Core(const std::size_t portAmount)
     for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx){
         m_reduceStates.flags.insert({portIdx, false});
     }
+
+    // Initialize reduce-all requests
+    for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx){
+        m_reduceAllStates.flags.insert({portIdx, false});
+    }
 }
 
 bool Core::tick()
@@ -182,6 +187,87 @@ bool Core::tick()
 
                         throw std::runtime_error("Core Switch: Reduce flag map corrupted!");
                     }
+                }
+            }
+        }
+        else if(Messages::e_Type::ReduceAll == anyMsg->type()) {
+            // Process message
+            {
+                const auto &msg = static_cast<const Messages::ReduceAll &>(*anyMsg.release());
+
+                spdlog::trace("Core Switch({}): Received reduce-all message from port #{}.", m_ID, portIdx);
+
+                // Check if this is the first reduce-all message
+                if(!m_reduceAllStates.bOngoing) {
+                    m_reduceAllStates.opType = msg.m_opType;
+                    m_reduceAllStates.value  = msg.m_data;
+                    m_reduceAllStates.flags.at(portIdx) = true;
+                }
+                else {
+                    m_reduceAllStates.bOngoing = true;
+
+                    if(m_reduceAllStates.flags.at(portIdx)) {
+                        spdlog::critical("Core Switch({}): Received multiple reduce-all messages from port #{}!", m_ID, portIdx);
+
+                        throw std::runtime_error("Core Switch: Received multiple reduce-all messages!");
+                    }
+
+                    if(msg.m_opType != m_reduceAllStates.opType) {
+                        spdlog::critical("Core Switch({}): Received reduce-all messages with different operation types from port #{}!", m_ID, portIdx);
+
+                        throw std::runtime_error("Core Switch: Operation types doesn't match in reduce-all messages!");
+                    }
+
+                    m_reduceAllStates.flags.at(portIdx) = true;
+
+                    switch(m_reduceAllStates.opType) {
+                        case Messages::ReduceAll::OpType::Max: {
+                            m_reduceAllStates.value = std::max(m_reduceAllStates.value, msg.m_data);
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Min: {
+                            m_reduceAllStates.value = std::min(m_reduceAllStates.value, msg.m_data);
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Sum: {
+                            m_reduceAllStates.value += msg.m_data;
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Multiply: {
+                            m_reduceAllStates.value *= msg.m_data;
+
+                            break;
+                        }
+                        default: {
+                            spdlog::critical("Core Switch({}): Received reduce-all messages with unknown operation type from port #{}!", m_ID, portIdx);
+
+                            throw std::runtime_error("Core Switch: Unknown operation type in reduce-all messages!");
+                        }
+                    }
+                }
+            }
+
+            // Check if all ports received the message
+            {
+                const auto rxCount = std::count_if(m_reduceAllStates.flags.cbegin(), m_reduceAllStates.flags.cend(), [](const auto& entry) { return entry.second; });
+                if(m_reduceAllStates.flags.size() == rxCount) {
+                    // Send reduce-all result message to all down-ports
+                    for(auto &port: m_ports) {
+                        auto msg = std::make_unique<Messages::ReduceAll>(m_reduceAllStates.opType);
+                        msg->m_data = m_reduceAllStates.value;
+
+                        port.pushOutgoing(std::move(msg));
+                    }
+
+                    // Reset all requests
+                    for(auto &elem: m_reduceAllStates.flags) {
+                        elem.second = false;
+                    }
+
+                    m_reduceAllStates.bOngoing = false;
                 }
             }
         }
