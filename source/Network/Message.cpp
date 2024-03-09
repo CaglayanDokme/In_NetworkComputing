@@ -56,3 +56,9 @@ Reduce::Reduce(const std::size_t destinationID, const OpType opType)
 {
     // Nothing
 }
+
+ReduceAll::ReduceAll(const OpType opType)
+: BaseMessage(e_Type::Reduce), m_opType(opType)
+{
+    // Nothing
+}

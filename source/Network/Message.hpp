@@ -9,7 +9,8 @@ namespace Network::Messages {
         BroadcastMessage,
         BarrierRequest,
         BarrierRelease,
-        Reduce
+        Reduce,
+        ReduceAll
     };
 
     [[nodiscard]] std::string toString(const e_Type eType);
@@ -84,6 +85,24 @@ namespace Network::Messages {
 
     public: /** Addressing **/
         const std::size_t m_destinationID;
+
+    public: /** Data **/
+        const OpType m_opType;
+        float m_data;
+    };
+
+    class ReduceAll : public BaseMessage {
+    public: /** Enumerations **/
+        enum class OpType {
+            Sum,
+            Multiply,
+            Max,
+            Min
+        };
+
+    public: /** Construction **/
+        ReduceAll() = delete;
+        explicit ReduceAll(const OpType opType);
 
     public: /** Data **/
         const OpType m_opType;
