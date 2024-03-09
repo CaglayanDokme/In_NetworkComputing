@@ -68,6 +68,47 @@ Edge::Edge(const std::size_t portAmount)
         const std::size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
         m_reduceStates.sameColumnPortID     = localColumnIdx;
     }
+
+    // Initialize reduce-all requests
+    {
+        /* A reduce-all request coming from a down-port will be utilized in in-switch reduce-all operation.
+         * When all down-ports have sent their data and their data has been reduced, a reduce-all request to all up-ports will be generated.
+         *
+         * After sending reduce-all request to all up-ports, the switch will wait for the reduced data from all up-ports.
+         * When all up-ports have sent their data, the reduce-all response will be sent to all down-ports.
+         * Note that the reduce-all response of all up-ports must be the same.
+         *
+         * When waiting for the reduced data from all up-ports, the switch cannot receive any reduce request from down-ports.
+         */
+
+        // To-up
+        {
+            // Down-port receive flags
+            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+                m_reduceAllStates.toUp.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_reduceAllStates.toUp.receiveFlags.size() != getDownPortAmount()) {
+                spdlog::critical("Edge Switch({}): Amount of up-port reduce-all requests is not equal to down-port amount!", m_ID);
+
+                throw std::runtime_error("Invalid mapping!");
+            }
+        }
+
+        // To-down
+        {
+            // Up-port receive flags
+            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
+                m_reduceAllStates.toDown.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_reduceAllStates.toDown.receiveFlags.size() != getUpPortAmount()) {
+                spdlog::critical("Edge Switch({}): Amount of down-port reduce-all requests is not equal to up-port amount!", m_ID);
+
+                throw std::runtime_error("Invalid mapping!");
+            }
+        }
+    }
 }
 
 bool Edge::tick()
@@ -363,6 +404,159 @@ bool Edge::tick()
                         txMsg->m_data = state.value;
 
                         m_downPortTable.at(state.destinationID).pushOutgoing(std::move(txMsg));
+
+                        // Reset to-down state
+                        state.bOngoing = false;
+                        std::transform(state.receiveFlags.begin(),
+                                       state.receiveFlags.end(),
+                                       std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                                       [](auto& entry) { entry.second = false; return entry; });
+                    }
+                }
+            }
+        }
+        else if(Messages::e_Type::ReduceAll == anyMsg->type()) {
+            const auto &msg = static_cast<const Messages::ReduceAll &>(*anyMsg.release());
+
+            if(downPort) {
+                auto &state = m_reduceAllStates.toUp;
+
+                // Check if to-down has an ongoing reduce-all operation
+                if(m_reduceAllStates.toDown.bOngoing) {
+                    spdlog::critical("Edge Switch({}): Ongoing reduce-all operation to down-ports!", m_ID);
+
+                    throw std::runtime_error("Edge Switch: Ongoing reduce-all operation to down-ports!");
+                }
+
+                if(state.bOngoing) {
+                    // Check if the source port has already sent a reduce-all message
+                    if(state.receiveFlags.at(sourcePortIdx)) {
+                        spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
+
+                        throw std::runtime_error("Edge Switch: This port has already sent a reduce-all message!");
+                    }
+
+                    // Check if the operation type is the same
+                    if(state.opType != msg.m_opType) {
+                        spdlog::critical("Edge Switch({}): In reduce-all message, the operation type is different!", m_ID);
+
+                        throw std::runtime_error("Edge Switch: The operation type is different!");
+                    }
+
+                    state.receiveFlags.at(sourcePortIdx) = true;
+
+                    // Apply reduce-all
+                    switch(msg.m_opType) {
+                        case Messages::ReduceAll::OpType::Max: {
+                            state.value = std::max(state.value, msg.m_data);
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Min: {
+                            state.value = std::min(state.value, msg.m_data);
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Sum: {
+                            state.value += msg.m_data;
+
+                            break;
+                        }
+                        case Messages::ReduceAll::OpType::Multiply: {
+                            state.value *= msg.m_data;
+
+                            break;
+                        }
+                        default: {
+                            spdlog::critical("Edge Switch({}): Received reduce-all message with unknown operation type from port #{}!", m_ID, sourcePortIdx);
+
+                            throw std::runtime_error("Edge Switch: Unknown operation type in reduce-all messages!");
+                        }
+                    }
+
+                    // Check if all down-ports have sent message
+                    if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                        // Send reduced message to all up-ports
+                        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                            auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                            txMsg->m_data = state.value;
+
+                            getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
+                        }
+
+                        // Reset to-up state
+                        state.bOngoing = false;
+                        std::transform(state.receiveFlags.begin(),
+                                       state.receiveFlags.end(),
+                                       std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                                       [](auto& entry) { entry.second = false; return entry; });
+
+                        // Set to-down state
+                        m_reduceAllStates.toDown.bOngoing = true;
+                    }
+                }
+                else {
+                    state.bOngoing = true;
+                    state.opType   = msg.m_opType;
+                    state.value    = msg.m_data;
+                    state.receiveFlags.at(sourcePortIdx) = true;
+                }
+            }
+            else {
+                auto &state = m_reduceAllStates.toDown;
+
+                // Check if to-up has an ongoing reduce-all operation
+                if(m_reduceAllStates.toUp.bOngoing) {
+                    spdlog::critical("Edge Switch({}): Ongoing reduce-all operation to up-ports!", m_ID);
+
+                    throw std::runtime_error("Edge Switch: Ongoing reduce-all operation to up-ports!");
+                }
+
+                if(!state.bOngoing) {
+                    spdlog::critical("Edge Switch({}): Reduce-all to-down wasn't initiated!", m_ID);
+
+                    throw std::runtime_error("Edge Switch: Reduce-all to-down wasn't initiated!");
+                }
+
+                // Check if the source port has already sent a reduce-all message
+                if(state.receiveFlags.at(sourcePortIdx)) {
+                    spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
+
+                    throw std::runtime_error("Edge Switch: This port has already sent a reduce-all message!");
+                }
+
+                // Check if this is the first reduce-all message
+                if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; })) {
+                    state.opType = msg.m_opType;
+                    state.value  = msg.m_data;
+                    state.receiveFlags.at(sourcePortIdx) = true;
+                }
+                else {
+                    // Check if the operation type is the same
+                    if(state.opType != msg.m_opType) {
+                        spdlog::critical("Edge Switch({}): In reduce-all message, the operation type is different!", m_ID);
+
+                        throw std::runtime_error("Edge Switch: The operation type is different!");
+                    }
+
+                    // Check if the data is the same
+                    if(state.value != msg.m_data) {
+                        spdlog::critical("Edge Switch({}): In reduce-all message, the data is different! Received {} != Expected {}", m_ID, msg.m_data, state.value);
+
+                        throw std::runtime_error("Edge Switch: The data is different!");
+                    }
+
+                    state.receiveFlags.at(sourcePortIdx) = true;
+
+                    // Check if all up-ports have sent message
+                    if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                        // Send reduced message to all down-ports
+                        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                            auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                            txMsg->m_data = state.value;
+
+                            getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
+                        }
 
                         // Reset to-down state
                         state.bOngoing = false;
