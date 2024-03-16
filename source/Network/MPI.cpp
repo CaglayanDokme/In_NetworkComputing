@@ -39,6 +39,12 @@ void MPI::tick()
 
             const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
+            if(msg.m_destinationID != m_ID) {
+                spdlog::critical("MPI({}): Received a message for another node({}) while in receive state!", m_ID, msg.m_destinationID);
+
+                throw std::logic_error("MPI cannot receive a message for another node!");
+            }
+
             m_directReceive.receivedData = msg.m_data;
             m_directReceive.sourceID = msg.m_sourceID;
 
