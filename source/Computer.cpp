@@ -20,8 +20,6 @@ Computer::Computer()
     if(nextID == computingNodeAmount) {
         spdlog::trace("That was the last computing node to be spawned.");
     }
-
-    m_task = std::thread(&Computer::task, this);
 }
 
 void Computer::setTotalAmount(const std::size_t totalAmount)
@@ -39,6 +37,11 @@ void Computer::setTotalAmount(const std::size_t totalAmount)
 
 bool Computer::tick()
 {
+    std::call_once(m_tickStarted, [this] {
+        m_task = std::thread(&Computer::task, this);
+        m_task.detach();
+    });
+
     // Advance port
     m_mpi.tick();
 
@@ -53,14 +56,6 @@ bool Computer::isReady() const
 void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
-
-    spdlog::info("Computer({}): Sending data..", m_ID);
-    m_mpi.send(m_ID, (m_ID + 1) % computingNodeAmount);
-
-    spdlog::info("Computer({}): Receiving data..", m_ID);
-    float data;
-    m_mpi.receive(data, (m_ID + computingNodeAmount - 1) % computingNodeAmount);
-    spdlog::info("Computer({}): Received data: {}", m_ID, data);
 
     for( ; true; sleep(1));
 }

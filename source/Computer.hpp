@@ -55,6 +55,7 @@ private: /** Members **/
     const std::size_t m_ID;
     Network::MPI m_mpi;
     std::thread m_task;
+    std::once_flag m_tickStarted;
 
     // Static
     inline static std::size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
