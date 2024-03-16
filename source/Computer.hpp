@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Network/Port.hpp"
+#include "Network/MPI.hpp"
+#include <thread>
 
 class Computer {
 public: /** Construction **/
@@ -35,7 +37,7 @@ public: /** Methods **/
      * @brief  Get the port of the computing node
      * @return Reference to the contained port
      */
-    [[nodiscard]] Network::Port &getPort() { return m_port; }
+    [[nodiscard]] Network::Port &getPort() { return m_mpi.getPort(); }
 
     /**
      * @brief  Check if the computing node has been initialized properly
@@ -43,9 +45,16 @@ public: /** Methods **/
      */
     [[nodiscard]] bool isReady() const;
 
+private:
+    /**
+     * @brief Main computing logic of the computing node
+     */
+    void task() __attribute__((noreturn));
+
 private: /** Members **/
     const std::size_t m_ID;
-    Network::Port m_port;
+    Network::MPI m_mpi;
+    std::thread m_task;
 
     // Static
     inline static std::size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)

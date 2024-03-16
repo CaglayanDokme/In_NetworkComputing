@@ -14,6 +14,7 @@ set(SOURCES
     source/Network/Switches/ISwitch.cpp
     source/Network/Switches/Edge.cpp
     source/Computer.cpp
+    source/Network/MPI.cpp
     source/Network/Message.cpp
     source/Network/Derivations.hpp
 )
@@ -26,6 +27,7 @@ set(HEADERS
     source/Network/Switches/ISwitch.hpp
     source/Network/Switches/Edge.hpp
     source/Computer.hpp
+    source/Network/MPI.hpp
     source/Network/Message.hpp
 )
 

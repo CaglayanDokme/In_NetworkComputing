@@ -3,7 +3,7 @@
 #include "Network/Message.hpp"
 
 Computer::Computer()
-: m_ID(nextID++)
+: m_ID(nextID++), m_mpi(m_ID)
 {
     spdlog::trace("Created computing node with ID #{}", m_ID);
 
@@ -20,6 +20,8 @@ Computer::Computer()
     if(nextID == computingNodeAmount) {
         spdlog::trace("That was the last computing node to be spawned.");
     }
+
+    m_task = std::thread(&Computer::task, this);
 }
 
 void Computer::setTotalAmount(const std::size_t totalAmount)
@@ -38,52 +40,27 @@ void Computer::setTotalAmount(const std::size_t totalAmount)
 bool Computer::tick()
 {
     // Advance port
-    m_port.tick();
-
-        if(m_port.hasIncoming()) {
-        auto anyMsg = m_port.popIncoming();
-
-        if(Network::Messages::e_Type::Message == anyMsg->type()) {
-            const auto &msg = *static_cast<const Network::Messages::DirectMessage *>(anyMsg.release());
-
-            spdlog::trace("Computer({}): Received message from node #{}", m_ID, msg.m_sourceID);
-
-            if(msg.m_destinationID != m_ID) {
-                spdlog::error("Computer({}): Message delivered to wrong computer! Actual destination was #{}", m_ID, msg.m_destinationID);
-            }
-        }
-        else if(Network::Messages::e_Type::BroadcastMessage == anyMsg->type()) {
-            const auto &msg = *static_cast<const Network::Messages::BroadcastMessage *>(anyMsg.release());
-
-            spdlog::trace("Computer({}): Received broadcast message from node #{}", m_ID, msg.m_sourceID);
-        }
-        else if(Network::Messages::e_Type::BarrierRelease == anyMsg->type()) {
-            spdlog::debug("Computer({}): Barrier release received!", m_ID);
-        }
-        else if(Network::Messages::e_Type::Reduce == anyMsg->type()) {
-            const auto &msg = *static_cast<const Network::Messages::Reduce *>(anyMsg.release());
-
-            spdlog::info("Computer({}): Received reduce message!", m_ID);
-            spdlog::info("Computer({}): Reduced data: {}", m_ID, msg.m_data);
-        }
-        else if(Network::Messages::e_Type::ReduceAll == anyMsg->type()) {
-            const auto &msg = *static_cast<const Network::Messages::ReduceAll *>(anyMsg.release());
-
-            spdlog::info("Computer({}): Received reduce-all message!", m_ID);
-            spdlog::info("Computer({}): Reduced data: {}", m_ID, msg.m_data);
-        }
-        else {
-            spdlog::error("Computer({}): Cannot determine the type of received message!", m_ID);
-            spdlog::debug("Type name was {}", anyMsg->typeToString());
-
-            return false;
-        }
-    }
+    m_mpi.tick();
 
     return true;
 }
 
 bool Computer::isReady() const
 {
-    return m_port.isConnected();
+    return m_mpi.isReady();
+}
+
+void Computer::task()
+{
+    spdlog::trace("Computer({}): Task started..", m_ID);
+
+    spdlog::info("Computer({}): Sending data..", m_ID);
+    m_mpi.send(m_ID, (m_ID + 1) % computingNodeAmount);
+
+    spdlog::info("Computer({}): Receiving data..", m_ID);
+    float data;
+    m_mpi.receive(data, (m_ID + computingNodeAmount - 1) % computingNodeAmount);
+    spdlog::info("Computer({}): Received data: {}", m_ID, data);
+
+    for( ; true; sleep(1));
 }
