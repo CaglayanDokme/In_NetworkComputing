@@ -31,7 +31,7 @@ namespace Network {
          *       This method shall be used to check if two port references refer to the same one.
          */
         [[nodiscard]] bool operator==(const Port &port) const;
-        [[nodiscard]] bool operator!=(const Port &port) const { return operator==(port); }
+        [[nodiscard]] bool operator!=(const Port &port) const { return !operator==(port); }
 
     public: /** Methods **/
         void tick();
