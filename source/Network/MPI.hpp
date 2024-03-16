@@ -8,7 +8,8 @@ namespace Network {
     class MPI {
         enum class State {
             Idle,
-            Receive
+            Receive,
+            BroadcastReceive,
         };
 
     public: /** Construction **/
@@ -39,6 +40,8 @@ namespace Network {
 
         void send(const float &data, const size_t destinationID);
         void receive(float &data, const size_t sourceID);
+        void broadcast(const float &data);
+        void receiveBroadcast(float &data, const size_t sourceID);
 
     private:
         void setState(const State state);
@@ -55,5 +58,13 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_directReceive;
+
+        // Broadcast receive
+        struct {
+            float receivedData{0.0f};
+            size_t sourceID{0};
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_broadcastReceive;
     };
 };
