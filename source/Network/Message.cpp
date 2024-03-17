@@ -1,22 +1,7 @@
 #include "Message.hpp"
+#include <map>
 
 using namespace Network::Messages;
-
-std::string Network::Messages::toString(const e_Type eType)
-{
-    switch(eType) {
-        case e_Type::Acknowledge:      return "Acknowledge";
-        case e_Type::DirectMessage:    return "DirectMessage";
-        case e_Type::BroadcastMessage: return "BroadcastMessage";
-        case e_Type::BarrierRequest:   return "BarrierRequest";
-        case e_Type::BarrierRelease:   return "BarrierRelease";
-        case e_Type::Reduce:           return "Reduce";
-        case e_Type::ReduceAll:        return "ReduceAll";
-
-        default:
-            return "Unknown";
-    }
-}
 
 BaseMessage::BaseMessage(const e_Type eType)
 : m_eType(eType)
@@ -71,4 +56,31 @@ ReduceAll::ReduceAll(const OpType opType)
 : BaseMessage(e_Type::ReduceAll), m_opType(opType)
 {
     // Nothing
+}
+
+const std::string &Network::Messages::toString(const e_Type eType)
+{
+    static const std::map<e_Type, std::string> strMap {
+        {e_Type::Acknowledge,      "Acknowledge"},
+        {e_Type::DirectMessage,    "DirectMessage"},
+        {e_Type::BroadcastMessage, "BroadcastMessage"},
+        {e_Type::BarrierRequest,   "BarrierRequest"},
+        {e_Type::BarrierRelease,   "BarrierRelease"},
+        {e_Type::Reduce,           "Reduce"},
+        {e_Type::ReduceAll,        "ReduceAll"}
+    };
+
+    return strMap.at(eType);
+}
+
+const std::string &Network::Messages::toString(const ReduceOperation opType)
+{
+    static const std::map<ReduceOperation, std::string> strMap {
+        {ReduceOperation::Sum,      "Sum"},
+        {ReduceOperation::Multiply, "Multiply"},
+        {ReduceOperation::Max,      "Max"},
+        {ReduceOperation::Min,      "Min"}
+    };
+
+    return strMap.at(opType);
 }

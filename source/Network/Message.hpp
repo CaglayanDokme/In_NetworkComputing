@@ -123,7 +123,14 @@ namespace Network::Messages {
      * @param  eType Message type
      * @return String representation of the message type
      */
-    [[nodiscard]] std::string toString(const e_Type eType);
+    [[nodiscard]] const std::string &toString(const e_Type eType);
+
+    /**
+     * @brief  Convert the reduce operation to a string
+     * @param  opType Reduce operation
+     * @return String representation of the reduce operation
+     */
+    [[nodiscard]] const std::string &toString(const ReduceOperation opType);
 
     /**
      * @brief  Reduce two values using the given operation
