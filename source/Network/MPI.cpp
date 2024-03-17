@@ -8,6 +8,7 @@
 #include "MPI.hpp"
 
 #include "spdlog/spdlog.h"
+#include "Derivations.hpp"
 
 using namespace Network;
 
@@ -33,7 +34,7 @@ void MPI::tick()
     }
 
     auto anyMsg = m_port.popIncoming();
-    spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
+    // spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
     switch(m_state) {
         case State::Acknowledge: {
@@ -45,9 +46,15 @@ void MPI::tick()
 
             const auto &msg = *static_cast<const Messages::Acknowledge *>(anyMsg.release());
 
-            m_acknowledge.sourceID = msg.m_sourceID;
-            m_acknowledge.ackType = msg.m_ackType;
+            {
+                std::lock_guard lock(m_acknowledge.mutex);
+                spdlog::trace("MPI({}): Saving acknowledgement from {}", m_ID, msg.m_sourceID);
 
+                m_acknowledge.sourceID = msg.m_sourceID;
+                m_acknowledge.ackType = msg.m_ackType;
+            }
+
+            setState(State::Idle);
             m_acknowledge.notifier.notify_one();
 
             break;
@@ -67,8 +74,12 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message for another node!");
             }
 
-            m_directReceive.receivedData = msg.m_data;
-            m_directReceive.sourceID = msg.m_sourceID;
+            {
+                std::lock_guard lock(m_directReceive.mutex);
+
+                m_directReceive.receivedData = msg.m_data;
+                m_directReceive.sourceID = msg.m_sourceID;
+            }
 
             m_directReceive.notifier.notify_one();
 
@@ -83,9 +94,15 @@ void MPI::tick()
 
             const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.release());
 
-            m_broadcastReceive.receivedData = msg.data;
-            m_broadcastReceive.sourceID = msg.m_sourceID;
+            {
+                std::lock_guard lock(m_broadcastReceive.mutex);
 
+                m_broadcastReceive.receivedData = msg.data;
+                m_broadcastReceive.sourceID = msg.m_sourceID;
+            }
+
+
+            setState(State::Idle);
             m_broadcastReceive.notifier.notify_one();
 
             break;
@@ -97,6 +114,7 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
 
+            setState(State::Idle);
             m_barrier.notifier.notify_one();
 
             break;
@@ -110,9 +128,14 @@ void MPI::tick()
 
             const auto &msg = *static_cast<const Messages::Reduce *>(anyMsg.release());
 
-            m_reduce.receivedData = msg.m_data;
-            m_reduce.operation = msg.m_opType;
+            {
+                std::lock_guard lock(m_reduce.mutex);
 
+                m_reduce.receivedData = msg.m_data;
+                m_reduce.operation = msg.m_opType;
+            }
+
+            setState(State::Idle);
             m_reduce.notifier.notify_one();
 
             break;
@@ -126,9 +149,14 @@ void MPI::tick()
 
             const auto &msg = *static_cast<const Messages::ReduceAll *>(anyMsg.release());
 
-            m_reduceAll.receivedData = msg.m_data;
-            m_reduceAll.operation = msg.m_opType;
+            {
+                std::lock_guard lock(m_reduceAll.mutex);
 
+                m_reduceAll.receivedData = msg.m_data;
+                m_reduceAll.operation = msg.m_opType;
+            }
+
+            setState(State::Idle);
             m_reduceAll.notifier.notify_one();
 
             break;
@@ -177,8 +205,6 @@ void MPI::send(const float &data, const size_t destinationID)
 
             throw std::logic_error("MPI: Invalid acknowledgement type!");
         }
-
-        setState(State::Idle);
     }
 }
 
@@ -209,8 +235,6 @@ void MPI::receive(float &data, const size_t sourceID)
 
         spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
     }
-
-    setState(State::Idle);
 }
 
 void MPI::broadcast(float &data, const size_t sourceID)
@@ -218,30 +242,75 @@ void MPI::broadcast(float &data, const size_t sourceID)
     if(m_ID == sourceID) {
         spdlog::trace("MPI({}): Broadcasting data {}", m_ID, data);
 
-        // Create a message
-        auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
+        // Broadcast message
+        {
+            auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
+            msg->data = data;
 
-        msg->data = data;
-
-        // Push the message to the port
-        m_port.pushOutgoing(std::move(msg));
-    }
-    else {
-        spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
-        setState(State::BroadcastReceive);
-
-        std::unique_lock lock(m_broadcastReceive.mutex);
-        m_broadcastReceive.notifier.wait(lock);
-
-        if(m_broadcastReceive.sourceID != sourceID) {
-            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_broadcastReceive.sourceID, sourceID);
-
-            throw std::logic_error("MPI: Invalid source ID!");
+            m_port.pushOutgoing(std::move(msg));
         }
 
-        data = m_broadcastReceive.receivedData;
+        // Wait for acknowledgements
+        {
+            const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
+            std::vector<bool> acks(compNodeAmount, false);
+            acks.at(m_ID) = true; // Skip the broadcaster
 
-        setState(State::Idle);
+            while(true) {
+                setState(State::Acknowledge);
+
+                // Wait for notification
+                std::unique_lock lock(m_acknowledge.mutex);
+                m_acknowledge.notifier.wait(lock);
+
+                if(m_acknowledge.ackType != Messages::e_Type::BroadcastMessage) {
+                    spdlog::critical("MPI({}): Received acknowledgement of invalid type({})!", m_ID, Messages::toString(m_acknowledge.ackType));
+
+                    throw std::logic_error("MPI: Invalid acknowledgement type!");
+                }
+
+                if(acks[m_acknowledge.sourceID]) {
+                    spdlog::critical("MPI({}): Received duplicate acknowledgement from {}", m_ID, m_acknowledge.sourceID);
+
+                    throw std::logic_error("MPI: Duplicate acknowledgement!");
+                }
+
+                acks.at(m_acknowledge.sourceID) = true;
+                spdlog::trace("MPI({}): Received acknowledgement from {}", m_ID, m_acknowledge.sourceID);
+
+                if(std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
+                    spdlog::trace("MPI({}): All acknowledgements received", m_ID);
+
+                    break;
+                }
+            }
+        }
+    }
+    else {
+        setState(State::BroadcastReceive);
+
+        // Wait for broadcast message
+        {
+            spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
+            std::unique_lock lock(m_broadcastReceive.mutex);
+            m_broadcastReceive.notifier.wait(lock);
+
+            if(m_broadcastReceive.sourceID != sourceID) {
+                spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_broadcastReceive.sourceID, sourceID);
+
+                throw std::logic_error("MPI: Invalid source ID!");
+            }
+
+            data = m_broadcastReceive.receivedData;
+        }
+
+        // Send an acknowledgement
+        {
+            auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
+            m_port.pushOutgoing(std::move(msg));
+
+            spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
+        }
     }
 }
 
@@ -259,8 +328,6 @@ void MPI::barrier()
     // Wait for the barrier to be released
     std::unique_lock lock(m_barrier.mutex);
     m_barrier.notifier.wait(lock);
-
-    setState(State::Idle);
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
 }
@@ -282,8 +349,6 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
         }
 
         data = Messages::reduce(data, m_reduce.receivedData, operation);
-
-        setState(State::Idle);
     }
     else {
         auto msg = std::make_unique<Messages::Reduce>(destinationID, operation);
@@ -315,8 +380,6 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
     }
 
     data = m_reduceAll.receivedData;
-
-    setState(State::Idle);
 }
 
 void MPI::setState(const State state)
