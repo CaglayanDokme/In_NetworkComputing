@@ -1,7 +1,6 @@
 #include "MPI.hpp"
 
 #include "spdlog/spdlog.h"
-#include "Message.hpp"
 
 using namespace Network;
 
@@ -76,6 +75,22 @@ void MPI::tick()
             }
 
             m_barrier.notifier.notify_one();
+
+            break;
+        }
+        case State::Reduce: {
+            if(anyMsg->type() != Messages::e_Type::Reduce) {
+                spdlog::critical("MPI({}): Received a message of type {} while in reduce state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::Reduce *>(anyMsg.get());
+
+            m_reduce.receivedData = msg.m_data;
+            m_reduce.operation = msg.m_opType;
+
+            m_reduce.notifier.notify_one();
 
             break;
         }
@@ -172,6 +187,35 @@ void MPI::barrier()
     setState(State::Idle);
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
+}
+
+void MPI::reduce(float &data, const ReduceOp operation, const size_t destinationID)
+{
+    spdlog::trace("MPI({}): Reducing data at {}", m_ID, destinationID);
+
+    if(m_ID == destinationID) {
+        setState(State::Reduce);
+
+        std::unique_lock lock(m_reduce.mutex);
+        m_reduce.notifier.wait(lock);
+
+        if(m_reduce.operation != operation) {
+            spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, static_cast<int>(m_reduce.operation), static_cast<int>(operation));
+
+            throw std::logic_error("MPI: Invalid operation!");
+        }
+
+        data = Messages::reduce(data, m_reduce.receivedData, operation);
+
+        setState(State::Idle);
+    }
+    else {
+        auto msg = std::make_unique<Messages::Reduce>(destinationID, operation);
+        msg->m_data = data;
+
+        // Push the message to the port
+        m_port.pushOutgoing(std::move(msg));
+    }
 }
 
 void MPI::setState(const State state)

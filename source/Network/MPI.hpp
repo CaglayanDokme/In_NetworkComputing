@@ -2,15 +2,22 @@
 
 #include <condition_variable>
 #include "Network/Port.hpp"
+#include "Message.hpp"
 #include <mutex>
 
 namespace Network {
     class MPI {
+    public: /** Types **/
+    public:
+        using ReduceOp = Messages::ReduceOperation;
+
+    private:
         enum class State {
             Idle,
             Receive,
             BroadcastReceive,
-            Barrier
+            Barrier,
+            Reduce
         };
 
     public: /** Construction **/
@@ -44,6 +51,7 @@ namespace Network {
         void broadcast(const float &data);
         void receiveBroadcast(float &data, const size_t sourceID);
         void barrier();
+        void reduce(float &data, const ReduceOp operation, const size_t destinationID);
 
     private:
         void setState(const State state);
@@ -74,5 +82,13 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_barrier;
+
+        // Reduce
+        struct {
+            float receivedData{0.0f};
+            ReduceOp operation;
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_reduce;
     };
 };
