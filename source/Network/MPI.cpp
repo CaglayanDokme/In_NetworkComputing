@@ -1,3 +1,10 @@
+/**
+ * @file    MPI.hpp
+ * @brief   Implementation of the MPI class which stands for the computing and message passing interface of the network.
+ * @author  Caglayan Dokme (caglayan.dokme@plan.space)
+ * @date    March 17, 2024
+ */
+
 #include "MPI.hpp"
 
 #include "spdlog/spdlog.h"
