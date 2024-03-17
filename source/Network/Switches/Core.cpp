@@ -43,7 +43,7 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(Messages::e_Type::Message == anyMsg->type()) {
+        if(Messages::e_Type::DirectMessage == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
             spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);

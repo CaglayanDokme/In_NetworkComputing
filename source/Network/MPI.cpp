@@ -37,7 +37,7 @@ void MPI::tick()
 
     switch(m_state) {
         case State::Receive: {
-            if(anyMsg->type() != Messages::e_Type::Message) {
+            if(anyMsg->type() != Messages::e_Type::DirectMessage) {
                 spdlog::critical("MPI({}): Received a message of type {} while in receive state!", m_ID, anyMsg->typeToString());
 
                 throw std::logic_error("MPI cannot receive a message of this type!");

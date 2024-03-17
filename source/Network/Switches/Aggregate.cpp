@@ -110,7 +110,7 @@ bool Aggregate::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
-        if(Messages::e_Type::Message == anyMsg->type()) {
+        if(Messages::e_Type::DirectMessage == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
             spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);

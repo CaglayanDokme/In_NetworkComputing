@@ -5,7 +5,7 @@ using namespace Network::Messages;
 std::string Network::Messages::toString(const e_Type eType)
 {
     switch(eType) {
-        case e_Type::Message:          return "Message";
+        case e_Type::DirectMessage:    return "DirectMessage";
         case e_Type::BroadcastMessage: return "BroadcastMessage";
         case e_Type::BarrierRequest:   return "BarrierRequest";
         case e_Type::BarrierRelease:   return "BarrierRelease";
@@ -29,7 +29,7 @@ std::string BaseMessage::typeToString() const
 }
 
 DirectMessage::DirectMessage(const std::size_t sourceID, const std::size_t destinationID)
-: BaseMessage(e_Type::Message), m_sourceID(sourceID), m_destinationID(destinationID), m_data()
+: BaseMessage(e_Type::DirectMessage), m_sourceID(sourceID), m_destinationID(destinationID), m_data()
 {
     // Nothing
 }

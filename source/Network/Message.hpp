@@ -6,7 +6,7 @@
 
 namespace Network::Messages {
     enum class e_Type {
-        Message,
+        DirectMessage,
         BroadcastMessage,
         BarrierRequest,
         BarrierRelease,
