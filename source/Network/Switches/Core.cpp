@@ -128,34 +128,7 @@ bool Core::tick()
                     }
 
                     m_reduceStates.flags.at(portIdx) = true;
-
-                    switch(m_reduceStates.opType) {
-                        case Messages::Reduce::OpType::Max: {
-                            m_reduceStates.value = std::max(m_reduceStates.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Min: {
-                            m_reduceStates.value = std::min(m_reduceStates.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Sum: {
-                            m_reduceStates.value += msg.m_data;
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Multiply: {
-                            m_reduceStates.value *= msg.m_data;
-
-                            break;
-                        }
-                        default: {
-                            spdlog::critical("Core Switch({}): Received reduce messages with unknown operation type from port #{}!", m_ID, portIdx);
-
-                            throw std::runtime_error("Core Switch: Unknown operation type in reduce messages!");
-                        }
-                    }
+                    m_reduceStates.value = Messages::reduce(m_reduceStates.value, msg.m_data, m_reduceStates.opType);
                 }
             }
 
@@ -218,34 +191,7 @@ bool Core::tick()
                     }
 
                     m_reduceAllStates.flags.at(portIdx) = true;
-
-                    switch(m_reduceAllStates.opType) {
-                        case Messages::ReduceAll::OpType::Max: {
-                            m_reduceAllStates.value = std::max(m_reduceAllStates.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Min: {
-                            m_reduceAllStates.value = std::min(m_reduceAllStates.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Sum: {
-                            m_reduceAllStates.value += msg.m_data;
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Multiply: {
-                            m_reduceAllStates.value *= msg.m_data;
-
-                            break;
-                        }
-                        default: {
-                            spdlog::critical("Core Switch({}): Received reduce-all messages with unknown operation type from port #{}!", m_ID, portIdx);
-
-                            throw std::runtime_error("Core Switch: Unknown operation type in reduce-all messages!");
-                        }
-                    }
+                    m_reduceAllStates.value = Messages::reduce(m_reduceAllStates.value, msg.m_data, m_reduceAllStates.opType);
                 }
             }
 

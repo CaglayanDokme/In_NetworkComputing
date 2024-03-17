@@ -277,34 +277,7 @@ bool Edge::tick()
 
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
-
-                    switch(state.opType) {
-                        case Messages::Reduce::OpType::Max: {
-                            state.value = std::max(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Min: {
-                            state.value = std::min(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Sum: {
-                            state.value += msg.m_data;
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Multiply: {
-                            state.value *= msg.m_data;
-
-                            break;
-                        }
-                        default: {
-                            spdlog::critical("Edge Switch({}): Received reduce message with unknown operation type from port #{}!", m_ID, sourcePortIdx);
-
-                            throw std::runtime_error("Edge Switch: Unknown operation type in reduce messages!");
-                        }
-                    }
+                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
 
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
@@ -367,34 +340,7 @@ bool Edge::tick()
 
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
-
-                    switch(state.opType) {
-                        case Messages::Reduce::OpType::Max: {
-                            state.value = std::max(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Min: {
-                            state.value = std::min(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Sum: {
-                            state.value += msg.m_data;
-
-                            break;
-                        }
-                        case Messages::Reduce::OpType::Multiply: {
-                            state.value *= msg.m_data;
-
-                            break;
-                        }
-                        default: {
-                            spdlog::critical("Edge Switch({}): Received reduce message with unknown operation type from port #{}!", m_ID, sourcePortIdx);
-
-                            throw std::runtime_error("Edge Switch: Unknown operation type in reduce messages!");
-                        }
-                    }
+                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
 
                     // Check if all up-ports and all other down-ports have sent message
                     const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });
@@ -444,35 +390,7 @@ bool Edge::tick()
                     }
 
                     state.receiveFlags.at(sourcePortIdx) = true;
-
-                    // Apply reduce-all
-                    switch(msg.m_opType) {
-                        case Messages::ReduceAll::OpType::Max: {
-                            state.value = std::max(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Min: {
-                            state.value = std::min(state.value, msg.m_data);
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Sum: {
-                            state.value += msg.m_data;
-
-                            break;
-                        }
-                        case Messages::ReduceAll::OpType::Multiply: {
-                            state.value *= msg.m_data;
-
-                            break;
-                        }
-                        default: {
-                            spdlog::critical("Edge Switch({}): Received reduce-all message with unknown operation type from port #{}!", m_ID, sourcePortIdx);
-
-                            throw std::runtime_error("Edge Switch: Unknown operation type in reduce-all messages!");
-                        }
-                    }
+                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
 
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {

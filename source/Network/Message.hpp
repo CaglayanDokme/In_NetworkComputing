@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <stdexcept>
 
 namespace Network::Messages {
     enum class e_Type {
@@ -13,7 +14,12 @@ namespace Network::Messages {
         ReduceAll
     };
 
-    [[nodiscard]] std::string toString(const e_Type eType);
+    enum class ReduceOperation {
+        Sum,
+        Multiply,
+        Max,
+        Min
+    };
 
     class BaseMessage {
     protected: /** Construction **/
@@ -72,12 +78,7 @@ namespace Network::Messages {
 
     class Reduce : public BaseMessage {
     public: /** Enumerations **/
-        enum class OpType {
-            Sum,
-            Multiply,
-            Max,
-            Min
-        };
+        using OpType = ReduceOperation;
 
     public: /** Construction **/
         Reduce() = delete;
@@ -93,12 +94,7 @@ namespace Network::Messages {
 
     class ReduceAll : public BaseMessage {
     public: /** Enumerations **/
-        enum class OpType {
-            Sum,
-            Multiply,
-            Max,
-            Min
-        };
+        using OpType = ReduceOperation;
 
     public: /** Construction **/
         ReduceAll() = delete;
@@ -108,4 +104,37 @@ namespace Network::Messages {
         const OpType m_opType;
         float m_data;
     };
+
+    /*** Helper Methods ***/
+    /**
+     * @brief  Convert the message type to a string
+     * @param  eType Message type
+     * @return String representation of the message type
+     */
+    [[nodiscard]] std::string toString(const e_Type eType);
+
+    /**
+     * @brief  Reduce two values using the given operation
+     * @tparam T Type of the values
+     * @param  a First value
+     * @param  b Second value
+     * @param  operation Operation to perform
+     * @return Reduced value
+     */
+    template<class T>
+    [[nodiscard]] T reduce(const T &a, const T &b, const ReduceOperation operation)
+    {
+        switch(operation) {
+            case ReduceOperation::Sum:
+                return a + b;
+            case ReduceOperation::Multiply:
+                return a * b;
+            case ReduceOperation::Max:
+                return (a > b) ? a : b;
+            case ReduceOperation::Min:
+                return (a < b) ? a : b;
+            default:
+                throw std::logic_error("Unknown reduce operation!");
+        }
+    }
 };
