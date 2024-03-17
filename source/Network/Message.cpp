@@ -10,6 +10,7 @@ std::string Network::Messages::toString(const e_Type eType)
         case e_Type::BarrierRequest:   return "BarrierRequest";
         case e_Type::BarrierRelease:   return "BarrierRelease";
         case e_Type::Reduce:           return "Reduce";
+        case e_Type::ReduceAll:        return "ReduceAll";
 
         default:
             return "Unknown";
