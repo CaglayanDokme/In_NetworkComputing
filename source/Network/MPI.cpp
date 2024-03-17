@@ -81,6 +81,7 @@ void MPI::tick()
                 m_directReceive.sourceID = msg.m_sourceID;
             }
 
+            setState(State::Idle);
             m_directReceive.notifier.notify_one();
 
             break;
@@ -161,9 +162,10 @@ void MPI::tick()
 
             break;
         }
-        default:
+        default: {
             spdlog::critical("MPI({}): Invalid state({})!", m_ID, static_cast<int>(m_state));
             throw std::logic_error("Invalid MPI state!");
+        }
     }
 }
 
@@ -343,7 +345,7 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
         m_reduce.notifier.wait(lock);
 
         if(m_reduce.operation != operation) {
-            spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, static_cast<int>(m_reduce.operation), static_cast<int>(operation));
+            spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(m_reduce.operation), Messages::toString(operation));
 
             throw std::logic_error("MPI: Invalid operation!");
         }
@@ -374,7 +376,7 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
     m_reduceAll.notifier.wait(lock);
 
     if(m_reduceAll.operation != operation) {
-        spdlog::critical("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, static_cast<int>(m_reduceAll.operation), static_cast<int>(operation));
+        spdlog::critical("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, Messages::toString(m_reduceAll.operation), Messages::toString(operation));
 
         throw std::logic_error("MPI: Invalid reduce-all operation!");
     }

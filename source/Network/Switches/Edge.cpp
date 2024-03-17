@@ -288,7 +288,7 @@ bool Edge::tick()
                     }
 
                     if(state.opType != msg.m_opType) {
-                        spdlog::critical("Edge Switch({}): In reduce message, the operation type is different!", m_ID);
+                        spdlog::critical("Edge Switch({}): Wrong reduce operation type from port #{}! Expected {} but received {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }
@@ -351,7 +351,7 @@ bool Edge::tick()
                     }
 
                     if(state.opType != msg.m_opType) {
-                        spdlog::critical("Edge Switch({}): In reduce message, the operation type is different!", m_ID);
+                        spdlog::critical("Edge Switch({}): Wrong reduce operation type from port #{}! Expected {} but received {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }
@@ -402,7 +402,7 @@ bool Edge::tick()
 
                     // Check if the operation type is the same
                     if(state.opType != msg.m_opType) {
-                        spdlog::critical("Edge Switch({}): In reduce-all message, the operation type is different!", m_ID);
+                        spdlog::critical("Edge Switch({}): Wrong reduce-all operation type from port #{}! Expected {} but received {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }

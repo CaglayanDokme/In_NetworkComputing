@@ -142,7 +142,7 @@ bool Core::tick()
                     }
 
                     if(msg.m_opType != m_reduceStates.opType) {
-                        spdlog::critical("Core Switch({}): Received reduce messages with different operation types from port #{}!", m_ID, portIdx);
+                        spdlog::critical("Core Switch({}): Wrong reduce operation type from port #{}! Expected {}, got {}", m_ID, portIdx, Messages::toString(m_reduceStates.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Core Switch: Operation types doesn't match in reduce messages!");
                     }
@@ -205,7 +205,7 @@ bool Core::tick()
                     }
 
                     if(msg.m_opType != m_reduceAllStates.opType) {
-                        spdlog::critical("Core Switch({}): Received reduce-all messages with different operation types from port #{}!", m_ID, portIdx);
+                        spdlog::critical("Core Switch({}): Wrong reduce-all operation type from port #{}! Expected {}, got {}", m_ID, portIdx, Messages::toString(m_reduceAllStates.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Core Switch: Operation types doesn't match in reduce-all messages!");
                     }

@@ -262,7 +262,7 @@ bool Aggregate::tick()
                         }
 
                         if(msg.m_opType != m_reduceStates.opType) {
-                            spdlog::critical("Aggregate Switch({}): Received reduce messages with different operation types from port #{}!", m_ID, sourcePortIdx);
+                            spdlog::critical("Aggregate Switch({}): Wrong reduce operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(m_reduceStates.opType), Messages::toString(msg.m_opType));
 
                             throw std::runtime_error("Aggregate Switch: Operation types doesn't match in reduce messages!");
                         }
@@ -387,7 +387,7 @@ bool Aggregate::tick()
 
                     // Check if the operation type is the same
                     if(state.opType != msg.m_opType) {
-                        spdlog::critical("Edge Switch({}): In reduce-all message, the operation type is different!", m_ID);
+                        spdlog::critical("Edge Switch({}): Wrong reduce-all operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg.m_opType));
 
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }
