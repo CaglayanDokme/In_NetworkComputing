@@ -48,8 +48,7 @@ namespace Network {
 
         void send(const float &data, const size_t destinationID);
         void receive(float &data, const size_t sourceID);
-        void broadcast(const float &data);
-        void receiveBroadcast(float &data, const size_t sourceID);
+        void broadcast(float &data, const size_t sourceID);
         void barrier();
         void reduce(float &data, const ReduceOp operation, const size_t destinationID);
 

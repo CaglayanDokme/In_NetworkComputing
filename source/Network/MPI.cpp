@@ -137,36 +137,36 @@ void MPI::receive(float &data, const size_t sourceID)
     setState(State::Idle);
 }
 
-void MPI::broadcast(const float &data)
+void MPI::broadcast(float &data, const size_t sourceID)
 {
-    spdlog::trace("MPI({}): Broadcasting data {}", m_ID, data);
+    if(m_ID == sourceID) {
+        spdlog::trace("MPI({}): Broadcasting data {}", m_ID, data);
 
-    // Create a message
-    auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
+        // Create a message
+        auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
 
-    msg->data = data;
+        msg->data = data;
 
-    // Push the message to the port
-    m_port.pushOutgoing(std::move(msg));
-}
-
-void MPI::receiveBroadcast(float &data, const size_t sourceID)
-{
-    spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
-    setState(State::BroadcastReceive);
-
-    std::unique_lock lock(m_broadcastReceive.mutex);
-    m_broadcastReceive.notifier.wait(lock);
-
-    if(m_broadcastReceive.sourceID != sourceID) {
-        spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_broadcastReceive.sourceID, sourceID);
-
-        throw std::logic_error("MPI: Invalid source ID!");
+        // Push the message to the port
+        m_port.pushOutgoing(std::move(msg));
     }
+    else {
+        spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
+        setState(State::BroadcastReceive);
 
-    data = m_broadcastReceive.receivedData;
+        std::unique_lock lock(m_broadcastReceive.mutex);
+        m_broadcastReceive.notifier.wait(lock);
 
-    setState(State::Idle);
+        if(m_broadcastReceive.sourceID != sourceID) {
+            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_broadcastReceive.sourceID, sourceID);
+
+            throw std::logic_error("MPI: Invalid source ID!");
+        }
+
+        data = m_broadcastReceive.receivedData;
+
+        setState(State::Idle);
+    }
 }
 
 void MPI::barrier()
