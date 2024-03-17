@@ -36,7 +36,7 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
 
-            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
+            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.release());
 
             if(msg.m_destinationID != m_ID) {
                 spdlog::critical("MPI({}): Received a message for another node({}) while in receive state!", m_ID, msg.m_destinationID);
@@ -58,7 +58,7 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
 
-            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
+            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.release());
 
             m_broadcastReceive.receivedData = msg.data;
             m_broadcastReceive.sourceID = msg.m_sourceID;
@@ -85,12 +85,28 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
 
-            const auto &msg = *static_cast<const Messages::Reduce *>(anyMsg.get());
+            const auto &msg = *static_cast<const Messages::Reduce *>(anyMsg.release());
 
             m_reduce.receivedData = msg.m_data;
             m_reduce.operation = msg.m_opType;
 
             m_reduce.notifier.notify_one();
+
+            break;
+        }
+        case State::ReduceAll: {
+            if(anyMsg->type() != Messages::e_Type::ReduceAll) {
+                spdlog::critical("MPI({}): Received a message of type {} while in reduce-all state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::ReduceAll *>(anyMsg.release());
+
+            m_reduceAll.receivedData = msg.m_data;
+            m_reduceAll.operation = msg.m_opType;
+
+            m_reduceAll.notifier.notify_one();
 
             break;
         }
@@ -216,6 +232,31 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
         // Push the message to the port
         m_port.pushOutgoing(std::move(msg));
     }
+}
+
+void MPI::reduceAll(float &data, const ReduceOp operation)
+{
+    spdlog::trace("MPI({}): Reducing data", m_ID);
+
+    setState(State::ReduceAll);
+
+    auto msg = std::make_unique<Messages::ReduceAll>(operation);
+    msg->m_data = data;
+
+    m_port.pushOutgoing(std::move(msg));
+
+    std::unique_lock lock(m_reduceAll.mutex);
+    m_reduceAll.notifier.wait(lock);
+
+    if(m_reduceAll.operation != operation) {
+        spdlog::critical("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, static_cast<int>(m_reduceAll.operation), static_cast<int>(operation));
+
+        throw std::logic_error("MPI: Invalid reduce-all operation!");
+    }
+
+    data = m_reduceAll.receivedData;
+
+    setState(State::Idle);
 }
 
 void MPI::setState(const State state)

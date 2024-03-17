@@ -17,7 +17,8 @@ namespace Network {
             Receive,
             BroadcastReceive,
             Barrier,
-            Reduce
+            Reduce,
+            ReduceAll
         };
 
     public: /** Construction **/
@@ -51,6 +52,7 @@ namespace Network {
         void broadcast(float &data, const size_t sourceID);
         void barrier();
         void reduce(float &data, const ReduceOp operation, const size_t destinationID);
+        void reduceAll(float &data, const ReduceOp operation);
 
     private:
         void setState(const State state);
@@ -89,5 +91,13 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_reduce;
+
+        // Reduce all
+        struct {
+            float receivedData{0.0f};
+            ReduceOp operation;
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_reduceAll;
     };
 };
