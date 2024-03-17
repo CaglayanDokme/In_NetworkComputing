@@ -19,15 +19,15 @@ void MPI::tick()
     if(!m_port.hasIncoming()) {
         return;
     }
+    else if(State::Idle == m_state) {
+        return;
+    }
+    else {
+        // Nothing to do
+    }
 
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
-
-    if(State::Idle == m_state) {
-        spdlog::critical("MPI({}): Although in idle state, node received a message!", m_ID);
-
-        throw std::logic_error("MPI cannot receive in idle state!");
-    }
 
     switch(m_state) {
         case State::Receive: {
