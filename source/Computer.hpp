@@ -55,7 +55,7 @@ private:
     /**
      * @brief Main computing logic of the computing node
      */
-    void task() __attribute__((noreturn));
+    void task();
 
 private: /** Members **/
     const std::size_t m_ID;
