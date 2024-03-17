@@ -129,6 +129,25 @@ bool Aggregate::tick()
                 getAvailableUpPort().pushOutgoing(std::move(anyMsg));
             }
         }
+        else if(Messages::e_Type::Acknowledge == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::Acknowledge *>(anyMsg.get());
+
+            spdlog::trace("Aggregate Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
+
+            // Decide on direction
+            if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
+                spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+
+                auto &targetPort = search->second;
+
+                targetPort.pushOutgoing(std::move(anyMsg));
+            }
+            else { // Re-direct to up-port(s)
+                spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+                getAvailableUpPort().pushOutgoing(std::move(anyMsg));
+            }
+        }
         else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
             spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 

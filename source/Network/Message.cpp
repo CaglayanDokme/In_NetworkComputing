@@ -5,6 +5,7 @@ using namespace Network::Messages;
 std::string Network::Messages::toString(const e_Type eType)
 {
     switch(eType) {
+        case e_Type::Acknowledge:      return "Acknowledge";
         case e_Type::DirectMessage:    return "DirectMessage";
         case e_Type::BroadcastMessage: return "BroadcastMessage";
         case e_Type::BarrierRequest:   return "BarrierRequest";
@@ -26,6 +27,14 @@ BaseMessage::BaseMessage(const e_Type eType)
 std::string BaseMessage::typeToString() const
 {
     return toString(m_eType);
+}
+
+Acknowledge::Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType)
+: BaseMessage(e_Type::Acknowledge), m_sourceID(sourceID), m_destinationID(destinationID), m_ackType(ackType)
+{
+    if(e_Type::Acknowledge == m_ackType) {
+        throw std::invalid_argument("Acknowledge type cannot be Acknowledge");
+    }
 }
 
 DirectMessage::DirectMessage(const std::size_t sourceID, const std::size_t destinationID)

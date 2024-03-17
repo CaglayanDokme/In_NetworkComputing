@@ -6,6 +6,7 @@
 
 namespace Network::Messages {
     enum class e_Type {
+        Acknowledge,
         DirectMessage,
         BroadcastMessage,
         BarrierRequest,
@@ -33,6 +34,17 @@ namespace Network::Messages {
 
     protected:
         const e_Type m_eType;
+    };
+
+    class Acknowledge : public BaseMessage {
+    public: /** Construction **/
+        Acknowledge() = delete;
+        explicit Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType);
+
+    public: /** Addressing **/
+        std::size_t m_sourceID;
+        std::size_t m_destinationID;
+        e_Type m_ackType;
     };
 
     class DirectMessage : public BaseMessage {

@@ -43,34 +43,37 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
+        spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), portIdx);
+
         if(Messages::e_Type::DirectMessage == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
-
-            spdlog::trace("Core Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, portIdx, msg.m_destinationID);
+            spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, anyMsg->typeToString(), msg.m_destinationID);
 
             const auto targetPortIdx = msg.m_destinationID / compNodePerPort;
             spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
+            if(portIdx == targetPortIdx) {
+                spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
+
+                throw std::runtime_error("Core Switch: Target and source ports are the same!");
+            }
+
             m_ports.at(targetPortIdx).pushOutgoing(std::move(anyMsg));
+        }
+        else if(Messages::e_Type::Acknowledge == anyMsg->type()) {
+            const auto &msg = *static_cast<const Messages::Acknowledge *>(anyMsg.get());
+            spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, anyMsg->typeToString(), msg.m_destinationID);
+
+            const auto targetPortIdx = msg.m_destinationID / compNodePerPort;
+            spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
             if(portIdx == targetPortIdx) {
-                spdlog::warn("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
+                spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, portIdx);
+
+                throw std::runtime_error("Core Switch: Target and source ports are the same!");
             }
-        }
-        else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
-            spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
 
-            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
-
-            // Re-direct to all other down-ports
-            for(auto &port : m_ports) {
-                if(sourcePort == port) {
-                    continue;
-                }
-
-                auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
-                port.pushOutgoing(std::move(uniqueMsg));
-            }
+            m_ports.at(targetPortIdx).pushOutgoing(std::move(anyMsg));
         }
         else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
@@ -88,6 +91,8 @@ bool Core::tick()
             // Check for barrier release
             {
                 if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                    spdlog::trace("Core Switch({}): All computing nodes sent barrier requests, releasing the barrier..", m_ID);
+
                     // Send barrier release to all ports
                     for(auto &port: m_ports) {
                         port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());

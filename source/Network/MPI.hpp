@@ -21,6 +21,7 @@ namespace Network {
     private:
         enum class State {
             Idle,
+            Acknowledge,
             Receive,
             BroadcastReceive,
             Barrier,
@@ -68,6 +69,14 @@ namespace Network {
         const std::size_t m_ID;
         State m_state{State::Idle};
         Port m_port;
+
+        // Acknowledge
+        struct {
+            size_t sourceID{0};
+            Messages::e_Type ackType;
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_acknowledge;
 
         // Direct receive
         struct {

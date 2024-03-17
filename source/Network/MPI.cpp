@@ -36,6 +36,22 @@ void MPI::tick()
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
     switch(m_state) {
+        case State::Acknowledge: {
+            if(anyMsg->type() != Messages::e_Type::Acknowledge) {
+                spdlog::critical("MPI({}): Received a message of type {} while in acknowledge state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::Acknowledge *>(anyMsg.release());
+
+            m_acknowledge.sourceID = msg.m_sourceID;
+            m_acknowledge.ackType = msg.m_ackType;
+
+            m_acknowledge.notifier.notify_one();
+
+            break;
+        }
         case State::Receive: {
             if(anyMsg->type() != Messages::e_Type::DirectMessage) {
                 spdlog::critical("MPI({}): Received a message of type {} while in receive state!", m_ID, anyMsg->typeToString());
@@ -132,30 +148,67 @@ void MPI::send(const float &data, const size_t destinationID)
 {
     spdlog::trace("MPI({}): Sending data {} to {}", m_ID, data, destinationID);
 
-    // Create a message
-    auto msg = std::make_unique<Messages::DirectMessage>(m_ID, destinationID);
+    // Send direct message
+    {
+        // Create a message
+        auto msg = std::make_unique<Messages::DirectMessage>(m_ID, destinationID);
 
-    msg->m_data = data;
+        msg->m_data = data;
 
-    // Push the message to the port
-    m_port.pushOutgoing(std::move(msg));
+        // Push the message to the port
+        m_port.pushOutgoing(std::move(msg));
+    }
+
+    // Wait for an acknowledgement
+    {
+        setState(State::Acknowledge);
+
+        std::unique_lock lock(m_acknowledge.mutex);
+        m_acknowledge.notifier.wait(lock);
+
+        if(m_acknowledge.sourceID != destinationID) {
+            spdlog::critical("MPI({}): Received acknowledgement from invalid source({}), expected #{}", m_ID, m_acknowledge.sourceID, destinationID);
+
+            throw std::logic_error("MPI: Invalid source ID!");
+        }
+
+        if(Messages::e_Type::DirectMessage != m_acknowledge.ackType) {
+            spdlog::critical("MPI({}): Received acknowledgement of invalid type({})!", m_ID, Messages::toString(m_acknowledge.ackType));
+
+            throw std::logic_error("MPI: Invalid acknowledgement type!");
+        }
+
+        setState(State::Idle);
+    }
 }
 
 void MPI::receive(float &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
+
     setState(State::Receive);
 
-    std::unique_lock lock(m_directReceive.mutex);
-    m_directReceive.notifier.wait(lock);
+    // Wait for a message
+    {
+        std::unique_lock lock(m_directReceive.mutex);
+        m_directReceive.notifier.wait(lock);
 
-    if(m_directReceive.sourceID != sourceID) {
-        spdlog::critical("MPI({}): Received data from invalid source({})!", m_ID, m_directReceive.sourceID);
+        if(m_directReceive.sourceID != sourceID) {
+            spdlog::critical("MPI({}): Received data from invalid source({})!", m_ID, m_directReceive.sourceID);
 
-        throw std::logic_error("MPI: Invalid source ID!");
+            throw std::logic_error("MPI: Invalid source ID!");
+        }
+
+        data = m_directReceive.receivedData;
     }
 
-    data = m_directReceive.receivedData;
+    // Send an acknowledgement
+    {
+        auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::DirectMessage);
+        m_port.pushOutgoing(std::move(msg));
+
+        spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
+    }
 
     setState(State::Idle);
 }
