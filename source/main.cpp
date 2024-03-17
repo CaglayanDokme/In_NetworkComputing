@@ -16,7 +16,7 @@ int main(const int argc, const char *const argv[])
 
     options.add_options()
             ("ports",
-             "Ports per switch(2, 4, 6, ..., 2n)",
+             "Ports per switch(4, 6, ..., 2n)",
              cxxopts::value<std::size_t>()->default_value(std::to_string(4)))
 
             ("log_level",
@@ -57,8 +57,8 @@ int main(const int argc, const char *const argv[])
     spdlog::set_level(spdlog::level::level_enum(arguments["log_level"].as<int>()));
     spdlog::info("Starting program..");
 
-    if(0 == portPerSwitch) {
-        spdlog::critical("Port per switch cannot be zero!");
+    if(4 > portPerSwitch) {
+        spdlog::critical("Port per switch cannot be less than 4!");
 
         return  -1;
     }
