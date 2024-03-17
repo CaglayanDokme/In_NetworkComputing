@@ -75,6 +75,21 @@ bool Core::tick()
 
             m_ports.at(targetPortIdx).pushOutgoing(std::move(anyMsg));
         }
+        else if(Messages::e_Type::BroadcastMessage == anyMsg->type()) {
+            spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, portIdx);
+
+            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.get());
+
+            // Re-direct to all other down-ports
+            for(auto &port : m_ports) {
+                if(sourcePort == port) {
+                    continue;
+                }
+
+                auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(msg);
+                port.pushOutgoing(std::move(uniqueMsg));
+            }
+        }
         else if(Messages::e_Type::BarrierRequest == anyMsg->type()) {
             const auto &msg = *static_cast<const Messages::BarrierRequest *>(anyMsg.release());
 
