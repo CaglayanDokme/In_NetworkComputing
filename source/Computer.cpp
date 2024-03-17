@@ -57,5 +57,8 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    spdlog::trace("Computer({}): Task finished..", m_ID);
+    m_bDone = true;
+
     for( ; true; sleep(1));
 }

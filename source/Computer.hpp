@@ -45,6 +45,12 @@ public: /** Methods **/
      */
     [[nodiscard]] bool isReady() const;
 
+    /**
+     * @brief  Check if the computing node has finished its task
+     * @return True If the computing node has finished its task
+     */
+    [[nodiscard]] bool isDone() const { return m_bDone; }
+
 private:
     /**
      * @brief Main computing logic of the computing node
@@ -56,6 +62,7 @@ private: /** Members **/
     Network::MPI m_mpi;
     std::thread m_task;
     std::once_flag m_tickStarted;
+    bool m_bDone{false};
 
     // Static
     inline static std::size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)

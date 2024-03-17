@@ -250,9 +250,15 @@ int main(const int argc, const char *const argv[])
                 spdlog::error("Tick #{} failed for computing node #{}!", tick, compNode.getID());
             }
         }
+
+        if(std::all_of(computeNodes.cbegin(), computeNodes.cend(), [](const auto &compNode) { return compNode.isDone(); })) {
+            spdlog::info("All computing nodes have finished their tasks!");
+
+            break;
+        }
     }
 
-    spdlog::warn("Program finished!");
+    spdlog::warn("Program finished after {} ticks!", tick);
 
     return 0;
 }
