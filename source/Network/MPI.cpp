@@ -68,6 +68,17 @@ void MPI::tick()
 
             break;
         }
+        case State::Barrier: {
+            if(anyMsg->type() != Messages::e_Type::BarrierRelease) {
+                spdlog::critical("MPI({}): Received a message of type {} while in barrier state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            m_barrier.notifier.notify_one();
+
+            break;
+        }
         default:
             spdlog::critical("MPI({}): Invalid state({})!", m_ID, static_cast<int>(m_state));
             throw std::logic_error("Invalid MPI state!");
@@ -95,7 +106,6 @@ void MPI::send(const float &data, const size_t destinationID)
 void MPI::receive(float &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
-
     setState(State::Receive);
 
     std::unique_lock lock(m_directReceive.mutex);
@@ -128,7 +138,6 @@ void MPI::broadcast(const float &data)
 void MPI::receiveBroadcast(float &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
-
     setState(State::BroadcastReceive);
 
     std::unique_lock lock(m_broadcastReceive.mutex);
@@ -143,6 +152,26 @@ void MPI::receiveBroadcast(float &data, const size_t sourceID)
     data = m_broadcastReceive.receivedData;
 
     setState(State::Idle);
+}
+
+void MPI::barrier()
+{
+    spdlog::trace("MPI({}): Barrier", m_ID);
+    setState(State::Barrier);
+
+    // Create a message
+    auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
+
+    // Push the message to the port
+    m_port.pushOutgoing(std::move(msg));
+
+    // Wait for the barrier to be released
+    std::unique_lock lock(m_barrier.mutex);
+    m_barrier.notifier.wait(lock);
+
+    setState(State::Idle);
+
+    spdlog::trace("MPI({}): Barrier released", m_ID);
 }
 
 void MPI::setState(const State state)

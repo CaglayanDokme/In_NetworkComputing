@@ -10,6 +10,7 @@ namespace Network {
             Idle,
             Receive,
             BroadcastReceive,
+            Barrier
         };
 
     public: /** Construction **/
@@ -42,6 +43,7 @@ namespace Network {
         void receive(float &data, const size_t sourceID);
         void broadcast(const float &data);
         void receiveBroadcast(float &data, const size_t sourceID);
+        void barrier();
 
     private:
         void setState(const State state);
@@ -66,5 +68,11 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_broadcastReceive;
+
+        // Barrier
+        struct {
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_barrier;
     };
 };
