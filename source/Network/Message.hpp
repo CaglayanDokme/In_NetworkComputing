@@ -42,9 +42,9 @@ namespace Network::Messages {
         explicit Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType);
 
     public: /** Addressing **/
-        std::size_t m_sourceID;
-        std::size_t m_destinationID;
-        e_Type m_ackType;
+        const std::size_t m_sourceID;
+        const std::size_t m_destinationID;
+        const e_Type m_ackType;
     };
 
     class DirectMessage : public BaseMessage {
