@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include "Network/Port.hpp"
 #include "Message.hpp"
+#include <vector>
 #include <mutex>
 
 namespace Network {
@@ -55,8 +56,8 @@ namespace Network {
          */
         [[nodiscard]] bool isReady() const;
 
-        void send(const float &data, const size_t destinationID);
-        void receive(float &data, const size_t sourceID);
+        void send(const std::vector<float> &data, const size_t destinationID);
+        void receive(std::vector<float> &data, const size_t sourceID);
         void broadcast(float &data, const size_t sourceID);
         void barrier();
         void reduce(float &data, const ReduceOp operation, const size_t destinationID);
@@ -80,7 +81,7 @@ namespace Network {
 
         // Direct receive
         struct {
-            float receivedData{0.0f};
+            std::vector<float> receivedData;
             size_t sourceID{0};
             std::mutex mutex;
             std::condition_variable notifier;

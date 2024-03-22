@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 #include <stdexcept>
 
 namespace Network::Messages {
@@ -57,7 +58,7 @@ namespace Network::Messages {
         const std::size_t m_destinationID;
 
     public: /** Data **/
-        float m_data;
+        std::vector<float> m_data;
     };
 
     class BroadcastMessage : public BaseMessage {

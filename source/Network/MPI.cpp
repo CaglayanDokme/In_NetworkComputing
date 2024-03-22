@@ -34,7 +34,7 @@ void MPI::tick()
     }
 
     auto anyMsg = m_port.popIncoming();
-    // spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
+    spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
     switch(m_state) {
         case State::Acknowledge: {
@@ -74,10 +74,16 @@ void MPI::tick()
                 throw std::logic_error("MPI cannot receive a message for another node!");
             }
 
+            if(msg.m_data.empty()) {
+                spdlog::critical("MPI({}): Empty data received from node #{}!", m_ID, msg.m_sourceID);
+
+                throw std::runtime_error("MPI mustn't received empty message!");
+            }
+
             {
                 std::lock_guard lock(m_directReceive.mutex);
 
-                m_directReceive.receivedData = msg.m_data;
+                m_directReceive.receivedData = std::move(msg.m_data);
                 m_directReceive.sourceID = msg.m_sourceID;
             }
 
@@ -174,9 +180,9 @@ bool MPI::isReady() const
     return m_port.isConnected();
 }
 
-void MPI::send(const float &data, const size_t destinationID)
+void MPI::send(const std::vector<float> &data, const size_t destinationID)
 {
-    spdlog::trace("MPI({}): Sending data {} to {}", m_ID, data, destinationID);
+    spdlog::trace("MPI({}): Sending data to {}", m_ID, destinationID);
 
     // Send direct message
     {
@@ -210,7 +216,7 @@ void MPI::send(const float &data, const size_t destinationID)
     }
 }
 
-void MPI::receive(float &data, const size_t sourceID)
+void MPI::receive(std::vector<float> &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
 
@@ -222,12 +228,12 @@ void MPI::receive(float &data, const size_t sourceID)
         m_directReceive.notifier.wait(lock);
 
         if(m_directReceive.sourceID != sourceID) {
-            spdlog::critical("MPI({}): Received data from invalid source({})!", m_ID, m_directReceive.sourceID);
+            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_directReceive.sourceID, sourceID);
 
             throw std::logic_error("MPI: Invalid source ID!");
         }
 
-        data = m_directReceive.receivedData;
+        data = std::move(m_directReceive.receivedData);
     }
 
     // Send an acknowledgement
