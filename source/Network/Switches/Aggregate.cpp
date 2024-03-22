@@ -111,12 +111,12 @@ bool Aggregate::tick()
         auto anyMsg = sourcePort.popIncoming();
 
         if(Messages::e_Type::DirectMessage == anyMsg->type()) {
-            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
+            const auto msg = static_cast<const Messages::DirectMessage *>(anyMsg.get());
 
-            spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg.m_destinationID);
+            spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
 
             // Decide on direction (up or down)
-            if(auto search = m_downPortTable.find(msg.m_destinationID); search != m_downPortTable.end()) {
+            if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
                 spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
 
                 auto &targetPort = search->second;

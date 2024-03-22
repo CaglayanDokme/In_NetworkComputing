@@ -46,10 +46,10 @@ bool Core::tick()
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), portIdx);
 
         if(Messages::e_Type::DirectMessage == anyMsg->type()) {
-            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.get());
-            spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, anyMsg->typeToString(), msg.m_destinationID);
+            const auto msg = static_cast<const Messages::DirectMessage *>(anyMsg.get());
+            spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, anyMsg->typeToString(), msg->m_destinationID);
 
-            const auto targetPortIdx = msg.m_destinationID / compNodePerPort;
+            const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
             spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
             if(portIdx == targetPortIdx) {
