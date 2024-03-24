@@ -70,7 +70,7 @@ namespace Network::Messages {
         const std::size_t m_sourceID;
 
     public: /** Data **/
-        float data;
+        std::vector<float> m_data;
     };
 
     class BarrierRequest : public BaseMessage {

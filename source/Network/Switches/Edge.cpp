@@ -188,6 +188,7 @@ bool Edge::tick()
                 {
                     spdlog::trace("Edge Switch({}): Redirecting to an up-port..", m_ID);
 
+                    // Avoid copying for the last re-direction as we no more need the message content
                     getAvailableUpPort().pushOutgoing(std::move(anyMsg));
                 }
             }

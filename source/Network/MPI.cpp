@@ -104,7 +104,7 @@ void MPI::tick()
             {
                 std::lock_guard lock(m_broadcastReceive.mutex);
 
-                m_broadcastReceive.receivedData = msg.data;
+                m_broadcastReceive.receivedData = std::move(msg.m_data);
                 m_broadcastReceive.sourceID = msg.m_sourceID;
             }
 
@@ -184,6 +184,12 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
 {
     spdlog::trace("MPI({}): Sending data to {}", m_ID, destinationID);
 
+    if(data.empty()) {
+        spdlog::critical("MPI({}): Cannot send an empty message!", m_ID);
+
+        throw std::invalid_argument("MPI cannot send empty message!");
+    }
+
     // Send direct message
     {
         // Create a message
@@ -222,6 +228,14 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
     setState(State::Receive);
 
+
+    if(!data.empty()) {
+        spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
+        spdlog::debug("MPI({}): Destination had {} elements", m_ID, data.size());
+
+        throw std::invalid_argument("Receive destination must be empty!");
+    }
+
     // Wait for a message
     {
         std::unique_lock lock(m_directReceive.mutex);
@@ -245,15 +259,22 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
     }
 }
 
-void MPI::broadcast(float &data, const size_t sourceID)
+void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 {
     if(m_ID == sourceID) {
-        spdlog::trace("MPI({}): Broadcasting data {}", m_ID, data);
+        spdlog::trace("MPI({}): Broadcasting..", m_ID);
+
+        if(data.empty()) {
+            spdlog::critical("MPI({}): Cannot send an empty message!", m_ID);
+
+            throw std::invalid_argument("MPI cannot send empty message!");
+        }
+
 
         // Broadcast message
         {
             auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
-            msg->data = data;
+            msg->m_data = data;
 
             m_port.pushOutgoing(std::move(msg));
         }
@@ -297,6 +318,13 @@ void MPI::broadcast(float &data, const size_t sourceID)
     else {
         setState(State::BroadcastReceive);
 
+        if(!data.empty()) {
+            spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
+            spdlog::debug("MPI({}): Destination had {} elements", m_ID, data.size());
+
+            throw std::invalid_argument("Receive destination must be empty!");
+        }
+
         // Wait for broadcast message
         {
             spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
@@ -309,7 +337,7 @@ void MPI::broadcast(float &data, const size_t sourceID)
                 throw std::logic_error("MPI: Invalid source ID!");
             }
 
-            data = m_broadcastReceive.receivedData;
+            data = std::move(m_broadcastReceive.receivedData);
         }
 
         // Send an acknowledgement
