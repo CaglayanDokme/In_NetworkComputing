@@ -271,7 +271,7 @@ bool Edge::tick()
                     state.bOngoing      = true;
                     state.destinationID = msg.m_destinationID;
                     state.opType        = msg.m_opType;
-                    state.value         = msg.m_data;
+                    state.value         = std::move(msg.m_data);
 
                     state.receiveFlags.at(sourcePortIdx) = true;
                 }
@@ -294,15 +294,27 @@ bool Edge::tick()
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }
 
+                    if(state.value.size() != msg.m_data.size()) {
+                        spdlog::critical("Edge Switch({}): Received data size({}) is different from the expected({})!", m_ID, msg.m_data.size(), state.value.size());
+
+                        throw std::runtime_error("Edge Switch: Received data size is different from the expected!");
+                    }
+
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
-                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
+
+                    std::transform(state.value.begin(),
+                                   state.value.end(),
+                                   msg.m_data.begin(),
+                                   state.value.begin(),
+                                   [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
 
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                         // Send reduced message to the same column up-port
                         auto txMsg = std::make_unique<Messages::Reduce>(state.destinationID, state.opType);
-                        txMsg->m_data = state.value;
+                        txMsg->m_data = std::move(state.value);
+                        state.value.clear();
 
                         getPort(m_reduceStates.sameColumnPortID).pushOutgoing(std::move(txMsg));
 
@@ -329,7 +341,7 @@ bool Edge::tick()
                     state.bOngoing      = true;
                     state.destinationID = msg.m_destinationID;
                     state.opType        = msg.m_opType;
-                    state.value         = msg.m_data;
+                    state.value         = std::move(msg.m_data);
                     state.receiveFlags.at(sourcePortIdx) = true;
 
                     if(getPort(sourcePortIdx) == m_downPortTable.at(msg.m_destinationID)) {
@@ -357,9 +369,19 @@ bool Edge::tick()
                         throw std::runtime_error("Edge Switch: The operation type is different!");
                     }
 
+                    if(state.value.size() != msg.m_data.size()) {
+                        spdlog::critical("Edge Switch({}): Received data size({}) is different from the expected({})!", m_ID, msg.m_data.size(), state.value.size());
+
+                        throw std::runtime_error("Edge Switch: Received data size is different from the expected!");
+                    }
+
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
-                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
+                    std::transform(state.value.begin(),
+                                   state.value.end(),
+                                   msg.m_data.begin(),
+                                   state.value.begin(),
+                                   [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
 
                     // Check if all up-ports and all other down-ports have sent message
                     const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });

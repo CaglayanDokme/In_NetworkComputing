@@ -268,25 +268,33 @@ bool Aggregate::tick()
                             throw std::runtime_error("Aggregate Switch: Operation types doesn't match in reduce messages!");
                         }
 
-                        const bool bFirstUpPortData = !bDownPort && !m_reduceStates.bUpPortReferenceValueSet;
-                        if(!bDownPort) {
-                            if(bFirstUpPortData) {
-                                m_reduceStates.upPortReferenceValue = msg.m_data;
-                                m_reduceStates.bUpPortReferenceValueSet = true;
-                            }
-                            else {
-                                if(m_reduceStates.upPortReferenceValue != msg.m_data) {
-                                    spdlog::critical("Aggregate Switch({}): Up-port(#{}) value({}) doesn't match the reference value({})!", m_ID, sourcePortIdx, msg.m_data, m_reduceStates.upPortReferenceValue);
+                        if(m_reduceStates.value.size() != msg.m_data.size()) {
+                            spdlog::critical("Aggregate Switch({}): Received reduce message with different data size from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, m_reduceStates.value.size(), msg.m_data.size());
 
-                                    throw std::runtime_error("Aggregate Switch: Up-port value doesn't match the reference value!");
-                                }
-                            }
+                            throw std::runtime_error("Aggregate Switch: Data sizes doesn't match in reduce messages!");
+                        }
+
+                        const bool bFirstUpPortData = !bDownPort && m_reduceStates.upPortReferenceValue.empty();
+
+                        if(bDownPort || bFirstUpPortData) {
+                            std::transform( m_reduceStates.value.begin(),
+                                            m_reduceStates.value.end(),
+                                            msg.m_data.begin(),
+                                            m_reduceStates.value.begin(),
+                                            [opType = m_reduceStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
                         }
 
                         m_reduceStates.flags.at(sourcePortIdx) = true;
 
-                        if(bDownPort || bFirstUpPortData) {
-                            m_reduceStates.value = Messages::reduce(m_reduceStates.value, msg.m_data, m_reduceStates.opType);
+                        if(bFirstUpPortData) {
+                            m_reduceStates.upPortReferenceValue = std::move(msg.m_data);
+                        }
+                        else {
+                            if(m_reduceStates.upPortReferenceValue != msg.m_data) {
+                                spdlog::critical("Aggregate Switch({}): Up-port(#{}) value doesn't match the reference value!", m_ID, sourcePortIdx);
+
+                                throw std::runtime_error("Aggregate Switch: Up-port value doesn't match the reference value!");
+                            }
                         }
                     }
 
@@ -310,7 +318,9 @@ bool Aggregate::tick()
                                 spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports! Re-directing..", m_ID);
 
                                 auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-                                msg->m_data = m_reduceStates.value;
+                                msg->m_data = std::move(m_reduceStates.value);
+                                m_reduceStates.value.clear();
+                                m_reduceStates.upPortReferenceValue.clear();
 
                                 destinationPort.pushOutgoing(std::move(msg));
 
@@ -318,7 +328,6 @@ bool Aggregate::tick()
                                                m_reduceStates.flags.end(),
                                                std::inserter(m_reduceStates.flags, m_reduceStates.flags.begin()),
                                                [](auto& entry) { entry.second = false; return entry; });
-                                m_reduceStates.bUpPortReferenceValueSet = false;
                             }
                         }
                         else {
@@ -326,7 +335,9 @@ bool Aggregate::tick()
                                 spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports and the same column down-port! Re-directing..", m_ID);
 
                                 auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-                                msg->m_data = m_reduceStates.value;
+                                msg->m_data = std::move(m_reduceStates.value);
+                                m_reduceStates.value.clear();
+                                m_reduceStates.upPortReferenceValue.clear();
 
                                 destinationPort.pushOutgoing(std::move(msg));
 
@@ -334,7 +345,6 @@ bool Aggregate::tick()
                                                m_reduceStates.flags.end(),
                                                std::inserter(m_reduceStates.flags, m_reduceStates.flags.begin()),
                                                [](auto& entry) { entry.second = false; return entry; });
-                                m_reduceStates.bUpPortReferenceValueSet = false;
                             }
                         }
                     }
@@ -342,11 +352,16 @@ bool Aggregate::tick()
                 else {
                     m_reduceStates.destinationID = msg.m_destinationID;
                     m_reduceStates.opType        = msg.m_opType;
-                    m_reduceStates.value         = msg.m_data;
+                    m_reduceStates.value         = std::move(msg.m_data);
 
                     if(!bDownPort) {
-                        m_reduceStates.upPortReferenceValue = msg.m_data;
-                        m_reduceStates.bUpPortReferenceValueSet = true;
+                        if(!m_reduceStates.upPortReferenceValue.empty()) {
+                            spdlog::critical("Aggregate Switch({}): Up-port reference value must have been empty!", m_ID);
+
+                            throw std::runtime_error("Aggregate Switch: Up-port reference value must have been empty!");
+                        }
+
+                        m_reduceStates.upPortReferenceValue = m_reduceStates.value;
                     }
 
                     m_reduceStates.flags.at(sourcePortIdx) = true;

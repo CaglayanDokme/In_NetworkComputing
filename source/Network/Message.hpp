@@ -102,7 +102,7 @@ namespace Network::Messages {
 
     public: /** Data **/
         const OpType m_opType;
-        float m_data;
+        std::vector<float> m_data;
     };
 
     class ReduceAll : public BaseMessage {

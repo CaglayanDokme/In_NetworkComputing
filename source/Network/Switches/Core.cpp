@@ -131,7 +131,7 @@ bool Core::tick()
                 if(std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; })) {
                     m_reduceStates.destinationID = msg.m_destinationID;
                     m_reduceStates.opType        = msg.m_opType;
-                    m_reduceStates.value         = msg.m_data;
+                    m_reduceStates.value         = std::move(msg.m_data);
                     m_reduceStates.flags.at(portIdx) = true;
                 }
                 else {
@@ -148,7 +148,11 @@ bool Core::tick()
                     }
 
                     m_reduceStates.flags.at(portIdx) = true;
-                    m_reduceStates.value = Messages::reduce(m_reduceStates.value, msg.m_data, m_reduceStates.opType);
+                    std::transform(m_reduceStates.value.cbegin(),
+                                   m_reduceStates.value.cend(),
+                                   msg.m_data.cbegin(),
+                                   m_reduceStates.value.begin(),
+                                   [opType = m_reduceStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
                 }
             }
 
@@ -166,7 +170,8 @@ bool Core::tick()
                     }
 
                     auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-                    msg->m_data = m_reduceStates.value;
+                    msg->m_data = std::move(m_reduceStates.value);
+                    m_reduceStates.value.clear();
 
                     m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 

@@ -138,7 +138,7 @@ void MPI::tick()
             {
                 std::lock_guard lock(m_reduce.mutex);
 
-                m_reduce.receivedData = msg.m_data;
+                m_reduce.receivedData = std::move(msg.m_data);
                 m_reduce.operation = msg.m_opType;
             }
 
@@ -368,9 +368,15 @@ void MPI::barrier()
     spdlog::trace("MPI({}): Barrier released", m_ID);
 }
 
-void MPI::reduce(float &data, const ReduceOp operation, const size_t destinationID)
+void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID)
 {
     spdlog::trace("MPI({}): Reducing data at {}", m_ID, destinationID);
+
+    if(data.empty()) {
+        spdlog::critical("MPI({}): Cannot join reduce with empty data container!", m_ID);
+
+        throw std::invalid_argument("MPI: Cannot join reduce with empty data container!");
+    }
 
     if(m_ID == destinationID) {
         setState(State::Reduce);
@@ -384,7 +390,21 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
             throw std::logic_error("MPI: Invalid operation!");
         }
 
-        data = Messages::reduce(data, m_reduce.receivedData, operation);
+        if(data.size() != m_reduce.receivedData.size()) {
+            spdlog::critical("MPI({}): Reduction vectors doesn't match in size! Given {}, received {}", m_ID, data.size(), m_reduce.receivedData.size());
+
+            throw std::runtime_error("MPI: Reduction vectors doesn't match in size!");
+        }
+
+        std::transform( data.cbegin(),
+                        data.cend(),
+                        m_reduce.receivedData.cbegin(),
+                        data.begin(),
+                        [operation](const float &lhs, const float &rhs) {
+                            return Messages::reduce(lhs, rhs, operation);
+                        });
+
+        m_reduce.receivedData.clear();
     }
     else {
         auto msg = std::make_unique<Messages::Reduce>(destinationID, operation);

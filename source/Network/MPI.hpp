@@ -60,7 +60,7 @@ namespace Network {
         void receive(std::vector<float> &data, const size_t sourceID);
         void broadcast(std::vector<float> &data, const size_t sourceID);
         void barrier();
-        void reduce(float &data, const ReduceOp operation, const size_t destinationID);
+        void reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID);
         void reduceAll(float &data, const ReduceOp operation);
 
     private:
@@ -103,7 +103,7 @@ namespace Network {
 
         // Reduce
         struct {
-            float receivedData{0.0f};
+            std::vector<float> receivedData;
             ReduceOp operation;
             std::mutex mutex;
             std::condition_variable notifier;
