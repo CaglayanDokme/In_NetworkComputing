@@ -270,7 +270,6 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("MPI cannot send empty message!");
         }
 
-
         // Broadcast message
         {
             auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);

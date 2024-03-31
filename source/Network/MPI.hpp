@@ -56,11 +56,51 @@ namespace Network {
          */
         [[nodiscard]] bool isReady() const;
 
+        /**
+         * @brief  Send a message to another computing node
+         * @param  data The data(array) to be sent
+         * @param  destinationID The ID of the destination computing node
+         */
         void send(const std::vector<float> &data, const size_t destinationID);
+
+        /**
+         * @brief  Receive a message from another computing node
+         * @param  data The data(array) to be received
+         * @param  sourceID The ID of the source computing node
+         *
+         * @note The destination data(array) must be empty
+         */
         void receive(std::vector<float> &data, const size_t sourceID);
+
+        /**
+         * @brief Broadcast a message to all computing nodes or receive a broadcasted message
+         * @param data The data(array) to be broadcasted or to be filled with the received data
+         * @param sourceID The ID of the broadcaster node
+         *
+         * @note If receiving, the destination data(array) must be empty
+         */
         void broadcast(std::vector<float> &data, const size_t sourceID);
+
+        /**
+         * @brief Get blocked until all computing nodes reach the barrier
+         */
         void barrier();
+
+        /**
+         * @brief Reduce the data of all computing nodes to a single node
+         * @param data          The data(array) to be reduced
+         * @param operation     The operation to be applied during the reduction
+         * @param destinationID The ID of the destination computing node
+         *
+         * @note The destination node must also contribute to the reduction by providing data(array)
+         */
         void reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID);
+
+        /**
+         * @brief Reduce the data of all computing nodes to all nodes
+         * @param data      The data(array) to be reduced
+         * @param operation The operation to be applied during the reduction
+         */
         void reduceAll(std::vector<float> &data, const ReduceOp operation);
 
     private:
