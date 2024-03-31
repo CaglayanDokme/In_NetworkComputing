@@ -277,9 +277,9 @@ bool Aggregate::tick()
                         const bool bFirstUpPortData = !bDownPort && m_reduceStates.upPortReferenceValue.empty();
 
                         if(bDownPort || bFirstUpPortData) {
-                            std::transform( m_reduceStates.value.begin(),
-                                            m_reduceStates.value.end(),
-                                            msg.m_data.begin(),
+                            std::transform( m_reduceStates.value.cbegin(),
+                                            m_reduceStates.value.cend(),
+                                            msg.m_data.cbegin(),
                                             m_reduceStates.value.begin(),
                                             [opType = m_reduceStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
                         }
@@ -409,7 +409,11 @@ bool Aggregate::tick()
                     }
 
                     state.receiveFlags.at(sourcePortIdx) = true;
-                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
+                    std::transform(state.value.cbegin(),
+                                   state.value.cend(),
+                                   msg.m_data.cbegin(),
+                                   state.value.begin(),
+                                   [opType = state.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
 
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
@@ -423,6 +427,7 @@ bool Aggregate::tick()
 
                         // Reset to-up state
                         state.bOngoing = false;
+                        state.value.clear();
                         std::transform(state.receiveFlags.begin(),
                                        state.receiveFlags.end(),
                                        std::inserter(state.receiveFlags, state.receiveFlags.begin()),
@@ -435,7 +440,7 @@ bool Aggregate::tick()
                 else {
                     state.bOngoing = true;
                     state.opType   = msg.m_opType;
-                    state.value    = msg.m_data;
+                    state.value    = std::move(msg.m_data);
                     state.receiveFlags.at(sourcePortIdx) = true;
                 }
             }
@@ -465,7 +470,7 @@ bool Aggregate::tick()
                 // Check if this is the first reduce-all message
                 if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; })) {
                     state.opType = msg.m_opType;
-                    state.value  = msg.m_data;
+                    state.value  = std::move(msg.m_data);
                     state.receiveFlags.at(sourcePortIdx) = true;
                 }
                 else {
@@ -478,7 +483,7 @@ bool Aggregate::tick()
 
                     // Check if the data is the same
                     if(state.value != msg.m_data) {
-                        spdlog::critical("Edge Switch({}): In reduce-all message, the data is different! Received {} != Expected {}", m_ID, msg.m_data, state.value);
+                        spdlog::critical("Edge Switch({}): In reduce-all message, the data is different!", m_ID);
 
                         throw std::runtime_error("Edge Switch: The data is different!");
                     }
@@ -497,6 +502,7 @@ bool Aggregate::tick()
 
                         // Reset to-down state
                         state.bOngoing = false;
+                        state.value.clear();
                         std::transform(state.receiveFlags.begin(),
                                        state.receiveFlags.end(),
                                        std::inserter(state.receiveFlags, state.receiveFlags.begin()),

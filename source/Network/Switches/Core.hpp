@@ -32,10 +32,10 @@ namespace Network::Switches {
         } m_reduceStates;
 
         struct {
-            bool bOngoing{false};               // True if a reduce-all operation is ongoing
-            std::map<std::size_t, bool> flags;  // Key: Port index, Value: True/False
-            Messages::ReduceAll::OpType opType; // Current operation type
-            float value;                        // Current reduction value (e.g. Sum of received values, maximum of received values)
+            bool bOngoing{false};                        // True if a reduce-all operation is ongoing
+            std::map<std::size_t, bool> flags;           // Key: Port index, Value: True/False
+            Messages::ReduceAll::OpType opType;          // Current operation type
+            decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
         } m_reduceAllStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of core switches in total

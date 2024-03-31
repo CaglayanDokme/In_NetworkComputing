@@ -199,7 +199,7 @@ bool Core::tick()
                 if(!m_reduceAllStates.bOngoing) {
                     m_reduceAllStates.bOngoing = true;
                     m_reduceAllStates.opType = msg.m_opType;
-                    m_reduceAllStates.value  = msg.m_data;
+                    m_reduceAllStates.value  = std::move(msg.m_data);
                     m_reduceAllStates.flags.at(portIdx) = true;
                 }
                 else {
@@ -216,7 +216,11 @@ bool Core::tick()
                     }
 
                     m_reduceAllStates.flags.at(portIdx) = true;
-                    m_reduceAllStates.value = Messages::reduce(m_reduceAllStates.value, msg.m_data, m_reduceAllStates.opType);
+                    std::transform(m_reduceAllStates.value.cbegin(),
+                                   m_reduceAllStates.value.cend(),
+                                   msg.m_data.cbegin(),
+                                   m_reduceAllStates.value.begin(),
+                                   [opType = m_reduceAllStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
                 }
             }
 

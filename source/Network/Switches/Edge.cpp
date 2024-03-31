@@ -303,9 +303,9 @@ bool Edge::tick()
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
 
-                    std::transform(state.value.begin(),
-                                   state.value.end(),
-                                   msg.m_data.begin(),
+                    std::transform(state.value.cbegin(),
+                                   state.value.cend(),
+                                   msg.m_data.cbegin(),
                                    state.value.begin(),
                                    [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
 
@@ -377,9 +377,9 @@ bool Edge::tick()
 
                     // Apply reduce
                     state.receiveFlags.at(sourcePortIdx) = true;
-                    std::transform(state.value.begin(),
-                                   state.value.end(),
-                                   msg.m_data.begin(),
+                    std::transform(state.value.cbegin(),
+                                   state.value.cend(),
+                                   msg.m_data.cbegin(),
                                    state.value.begin(),
                                    [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
 
@@ -431,7 +431,11 @@ bool Edge::tick()
                     }
 
                     state.receiveFlags.at(sourcePortIdx) = true;
-                    state.value = Messages::reduce(state.value, msg.m_data, state.opType);
+                    std::transform(state.value.cbegin(),
+                                   state.value.cend(),
+                                   msg.m_data.cbegin(),
+                                   state.value.begin(),
+                                   [opType = state.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
 
                     // Check if all down-ports have sent message
                     if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
@@ -442,6 +446,7 @@ bool Edge::tick()
 
                             getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
                         }
+                        state.value.clear();
 
                         // Reset to-up state
                         state.bOngoing = false;
@@ -455,9 +460,15 @@ bool Edge::tick()
                     }
                 }
                 else {
+                    if(!state.value.empty()) {
+                        spdlog::critical("Edge Switch({}): Reduce-all to-up value wasn't empty!!", m_ID);
+
+                        throw std::runtime_error("Edge Switch: Reduce-all to-up value wasn't empty!!");
+                    }
+
                     state.bOngoing = true;
                     state.opType   = msg.m_opType;
-                    state.value    = msg.m_data;
+                    state.value    = std::move(msg.m_data);
                     state.receiveFlags.at(sourcePortIdx) = true;
                 }
             }
@@ -486,8 +497,14 @@ bool Edge::tick()
 
                 // Check if this is the first reduce-all message
                 if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; })) {
+                    if(!state.value.empty()) {
+                        spdlog::critical("Edge Switch({}): Reduce-all to-down value wasn't empty!!", m_ID);
+
+                        throw std::runtime_error("Edge Switch: Reduce-all to-down value wasn't empty!!");
+                    }
+
                     state.opType = msg.m_opType;
-                    state.value  = msg.m_data;
+                    state.value  = std::move(msg.m_data);
                     state.receiveFlags.at(sourcePortIdx) = true;
                 }
                 else {
@@ -500,7 +517,7 @@ bool Edge::tick()
 
                     // Check if the data is the same
                     if(state.value != msg.m_data) {
-                        spdlog::critical("Edge Switch({}): In reduce-all message, the data is different! Received {} != Expected {}", m_ID, msg.m_data, state.value);
+                        spdlog::critical("Edge Switch({}): In reduce-all message, the data is different!", m_ID);
 
                         throw std::runtime_error("Edge Switch: The data is different!");
                     }
@@ -523,6 +540,8 @@ bool Edge::tick()
                                        state.receiveFlags.end(),
                                        std::inserter(state.receiveFlags, state.receiveFlags.begin()),
                                        [](auto& entry) { entry.second = false; return entry; });
+
+                        state.value.clear();
                     }
                 }
             }

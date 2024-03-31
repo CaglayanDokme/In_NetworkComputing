@@ -68,18 +68,11 @@ namespace Network::Switches {
 
         struct {
             struct {
-                bool bOngoing{false};                     // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags; // Key: Port index (Only down-ports), Value: True/False
-                Messages::ReduceAll::OpType opType;       // Current operation type
-                float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toUp;
-
-            struct {
-                bool bOngoing{false};                     // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags; // Key: Port index (Only up-ports), Value: True/False
-                Messages::ReduceAll::OpType opType;       // Current operation type
-                float value;                              // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toDown;
+                bool bOngoing{false};                        // True if a reduce operation is ongoing
+                std::map<std::size_t, bool> receiveFlags;    // Key: Port index (Only down-ports or only up-ports), Value: True/False
+                Messages::ReduceAll::OpType opType;          // Current operation type
+                decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
+            } toUp, toDown;
         } m_reduceAllStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of aggregate switches in total

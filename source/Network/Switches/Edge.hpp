@@ -60,19 +60,11 @@ namespace Network::Switches {
         struct {
             struct {
                 bool bOngoing{false};                     // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags; // Key: Down-port index, Value: True/False
-                std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
-                Messages::Reduce::OpType opType;          // Current operation type
-                decltype(Messages::Reduce::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toUp;
-
-            struct {
-                bool bOngoing{false};                     // True if a reduce operation is ongoing
                 std::map<std::size_t, bool> receiveFlags; // Key: Port index, Value: True/False
                 std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
                 Messages::Reduce::OpType opType;          // Current operation type
                 decltype(Messages::Reduce::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toDown;
+            } toUp, toDown;
 
             std::size_t sameColumnPortID; // ID of the same-column up-port
         } m_reduceStates;
@@ -80,17 +72,10 @@ namespace Network::Switches {
         struct {
             struct {
                 bool bOngoing{false};                        // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags;    // Key: Port index (Only down-ports), Value: True/False
+                std::map<std::size_t, bool> receiveFlags;    // Key: Port index (Only down-ports or only up-ports), Value: True/False
                 Messages::ReduceAll::OpType opType;          // Current operation type
                 decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toUp;
-
-            struct {
-                bool bOngoing{false};                        // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags;    // Key: Port index (Only up-ports), Value: True/False
-                Messages::ReduceAll::OpType opType;          // Current operation type
-                decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toDown;
+            } toUp, toDown;
         } m_reduceAllStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total

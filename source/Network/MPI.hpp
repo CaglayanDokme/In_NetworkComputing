@@ -61,7 +61,7 @@ namespace Network {
         void broadcast(std::vector<float> &data, const size_t sourceID);
         void barrier();
         void reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID);
-        void reduceAll(float &data, const ReduceOp operation);
+        void reduceAll(std::vector<float> &data, const ReduceOp operation);
 
     private:
         void setState(const State state);
@@ -81,7 +81,7 @@ namespace Network {
 
         // Direct receive
         struct {
-            std::vector<float> receivedData;
+            decltype(Messages::DirectMessage::m_data) receivedData;
             size_t sourceID{0};
             std::mutex mutex;
             std::condition_variable notifier;
@@ -89,7 +89,7 @@ namespace Network {
 
         // Broadcast receive
         struct {
-            std::vector<float> receivedData;
+            decltype(Messages::BroadcastMessage::m_data) receivedData;
             size_t sourceID{0};
             std::mutex mutex;
             std::condition_variable notifier;
@@ -103,7 +103,7 @@ namespace Network {
 
         // Reduce
         struct {
-            std::vector<float> receivedData;
+            decltype(Messages::Reduce::m_data) receivedData;
             ReduceOp operation;
             std::mutex mutex;
             std::condition_variable notifier;
@@ -111,7 +111,7 @@ namespace Network {
 
         // Reduce all
         struct {
-            float receivedData{0.0f};
+            decltype(Messages::ReduceAll::m_data) receivedData{0.0f};
             ReduceOp operation;
             std::mutex mutex;
             std::condition_variable notifier;

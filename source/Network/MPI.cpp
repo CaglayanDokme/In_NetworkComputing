@@ -159,7 +159,7 @@ void MPI::tick()
             {
                 std::lock_guard lock(m_reduceAll.mutex);
 
-                m_reduceAll.receivedData = msg.m_data;
+                m_reduceAll.receivedData = std::move(msg.m_data);
                 m_reduceAll.operation = msg.m_opType;
             }
 
@@ -415,14 +415,14 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
     }
 }
 
-void MPI::reduceAll(float &data, const ReduceOp operation)
+void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 {
     spdlog::trace("MPI({}): Reducing data", m_ID);
 
     setState(State::ReduceAll);
 
     auto msg = std::make_unique<Messages::ReduceAll>(operation);
-    msg->m_data = data;
+    msg->m_data = std::move(data);
 
     m_port.pushOutgoing(std::move(msg));
 
@@ -435,7 +435,8 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
         throw std::logic_error("MPI: Invalid reduce-all operation!");
     }
 
-    data = m_reduceAll.receivedData;
+    data = std::move(m_reduceAll.receivedData);
+    m_reduceAll.receivedData.clear();
 }
 
 void MPI::setState(const State state)
