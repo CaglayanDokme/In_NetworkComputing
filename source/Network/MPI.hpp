@@ -27,7 +27,8 @@ namespace Network {
             BroadcastReceive,
             Barrier,
             Reduce,
-            ReduceAll
+            ReduceAll,
+            Scatter
         };
 
     public: /** Construction **/
@@ -103,6 +104,15 @@ namespace Network {
          */
         void reduceAll(std::vector<float> &data, const ReduceOp operation);
 
+        /**
+         * @brief Scatter the data of a single computing node to all computing nodes
+         * @param data     The data array to be scattered
+         * @param sourceID The ID of the source computing node
+         *
+         * @note If not the source node, the destination data(array) must be empty
+         */
+        void scatter(std::vector<float> &data, const size_t sourceID);
+
     private:
         void setState(const State state);
 
@@ -156,5 +166,13 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_reduceAll;
+
+        // Scatter
+        struct {
+            decltype(Messages::Scatter::m_data) receivedData;
+            size_t sourceID{0};
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_scatter;
     };
 };

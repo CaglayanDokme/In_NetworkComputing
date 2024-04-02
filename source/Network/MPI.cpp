@@ -168,6 +168,27 @@ void MPI::tick()
 
             break;
         }
+        case State::Scatter: {
+            if(anyMsg->type() != Messages::e_Type::Scatter) {
+                spdlog::critical("MPI({}): Received a message of type {} while in scatter state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::Scatter *>(anyMsg.release());
+
+            {
+                std::lock_guard lock(m_scatter.mutex);
+
+                m_scatter.receivedData = std::move(msg.m_data);
+                m_scatter.sourceID = msg.m_sourceID;
+            }
+
+            setState(State::Idle);
+            m_scatter.notifier.notify_one();
+
+            break;
+        }
         default: {
             spdlog::critical("MPI({}): Invalid state({})!", m_ID, static_cast<int>(m_state));
             throw std::logic_error("Invalid MPI state!");
@@ -436,6 +457,60 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 
     data = std::move(m_reduceAll.receivedData);
     m_reduceAll.receivedData.clear();
+}
+
+void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
+{
+    spdlog::trace("MPI({}): Scattering data from {}", m_ID, sourceID);
+
+    if(m_ID == sourceID) {
+        if(data.empty()) {
+            spdlog::critical("MPI({}): Cannot scatter empty data!", m_ID);
+
+            throw std::invalid_argument("MPI cannot scatter empty data!");
+        }
+
+        const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
+        const auto remainder = data.size() % compNodeAmount;
+
+        if(0 != remainder) {
+            spdlog::critical("MPI({}): Data size({}) is not divisible by the computing node amount({})!", m_ID, data.size(), compNodeAmount);
+
+            throw std::runtime_error("MPI: Data size is not divisible by the computing node amount!");
+        }
+
+        const auto chunkSize = data.size() / compNodeAmount;
+
+        std::vector<float> localChunk = std::move(std::vector<float>(data.cbegin(), data.cbegin() + chunkSize));
+        data.erase(data.cbegin(), data.cbegin() + chunkSize);
+
+        auto msg = std::make_unique<Messages::Scatter>(m_ID);
+        msg->m_data = std::move(data);
+        data = std::move(localChunk);
+
+        m_port.pushOutgoing(std::move(msg));
+    }
+    else {
+        if(!data.empty()) {
+            spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
+            spdlog::debug("MPI({}): Destination had {} elements", m_ID, data.size());
+
+            throw std::invalid_argument("Receive destination must be empty!");
+        }
+
+        setState(State::Scatter);
+
+        std::unique_lock lock(m_directReceive.mutex);
+        m_directReceive.notifier.wait(lock);
+
+        if(m_directReceive.sourceID != sourceID) {
+            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_directReceive.sourceID, sourceID);
+
+            throw std::logic_error("MPI: Invalid source ID!");
+        }
+
+        data = std::move(m_directReceive.receivedData);
+    }
 }
 
 void MPI::setState(const State state)
