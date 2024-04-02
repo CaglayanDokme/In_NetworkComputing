@@ -40,6 +40,14 @@ namespace Network::Switches {
         [[nodiscard]] Port &getDownPort(const std::size_t &portID);
 
     private:
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
+
         /**
          * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)
          * @return Reference to the most available port
