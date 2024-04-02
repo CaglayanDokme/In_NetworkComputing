@@ -58,6 +58,12 @@ ReduceAll::ReduceAll(const OpType opType)
     // Nothing
 }
 
+Scatter::Scatter(const std::size_t sourceID)
+: BaseMessage(e_Type::Scatter), m_sourceID(sourceID)
+{
+    // Nothing
+}
+
 const std::string &Network::Messages::toString(const e_Type eType)
 {
     static const std::map<e_Type, std::string> strMap {

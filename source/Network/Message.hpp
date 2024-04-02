@@ -13,7 +13,8 @@ namespace Network::Messages {
         BarrierRequest,
         BarrierRelease,
         Reduce,
-        ReduceAll
+        ReduceAll,
+        Scatter,
     };
 
     enum class ReduceOperation {
@@ -115,6 +116,18 @@ namespace Network::Messages {
 
     public: /** Data **/
         const OpType m_opType;
+        std::vector<float> m_data;
+    };
+
+    class Scatter : public BaseMessage {
+    public: /** Construction **/
+        Scatter() = delete;
+        explicit Scatter(const std::size_t sourceID);
+
+    public: /** Addressing **/
+        const std::size_t m_sourceID;
+
+    public: /** Data **/
         std::vector<float> m_data;
     };
 
