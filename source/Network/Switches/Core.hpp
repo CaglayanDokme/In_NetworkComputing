@@ -21,6 +21,20 @@ namespace Network::Switches {
     public: /** Methods **/
         [[nodiscard]] bool tick() final;
 
+    private:
+        /**
+         * @brief Process a message received from a port
+         * @param sourcePortIdx Index of the source port
+         * @param msg          Message to be processed
+         */
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
+
     private: /** Members **/
         std::map<std::size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False
 
@@ -39,5 +53,6 @@ namespace Network::Switches {
         } m_reduceAllStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of core switches in total
+        inline static std::size_t compNodePerPort = 0;
     };
 }

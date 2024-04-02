@@ -40,6 +40,11 @@ namespace Network::Switches {
         [[nodiscard]] Port &getDownPort(const std::size_t &portID);
 
     private:
+        /**
+         * @brief Process a message received from a port
+         * @param sourcePortIdx Index of the source port
+         * @param msg          Message to be processed
+         */
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
