@@ -1,5 +1,6 @@
 #include "Edge.hpp"
 #include "spdlog/spdlog.h"
+#include "Network/Derivations.hpp"
 
 using namespace Network::Switches;
 
@@ -10,10 +11,9 @@ Edge::Edge(const std::size_t portAmount)
 
     // Calculate look-up table for re-direction to down ports
     {
-        const std::size_t downPortAmount = m_portAmount / 2;
-        const std::size_t firstCompNodeIdx = m_ID * downPortAmount;
+        const std::size_t firstCompNodeIdx = m_ID * getDownPortAmount();
 
-        for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             const auto compNodeIdx = firstCompNodeIdx + downPortIdx;
             m_downPortTable.insert({compNodeIdx, getDownPort(downPortIdx)});
 
@@ -157,6 +157,10 @@ bool Edge::tick()
             }
             case Messages::e_Type::ReduceAll: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                break;
+            }
+            case Messages::e_Type::Scatter: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
                 break;
             }
             default: {
@@ -614,6 +618,82 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 state.value.clear();
             }
         }
+    }
+}
+
+void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
+{
+    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Edge Switch({}): Received an empty scatter message from source port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Edge Switch: Received an empty scatter message!");
+    }
+
+    // Decide on direction
+    if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
+        if(0 != (msg->m_data.size() % getDownPortAmount())) {
+            spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by down-port amount({})!", m_ID, msg->m_data.size(), getDownPortAmount());
+
+            throw std::runtime_error("Edge Switch: Scatter message size is not divisible by down-port amount!");
+        }
+
+        const auto chunkSize = msg->m_data.size() / getDownPortAmount();
+
+        // Scatter to down-ports
+        for(std::size_t downPortIdx = 0, dataIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx, dataIdx += chunkSize) {
+            auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
+            uniqueMsg->m_data.reserve(chunkSize);
+            uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+            getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
+        }
+    }
+    else { // Coming from a down-port
+        if(m_downPortTable.at(msg->m_sourceID) != getPort(sourcePortIdx)) {
+            spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID, sourcePortIdx);
+
+            throw std::runtime_error("Edge Switch: Source ID and source port index didn't match in scatter message!");
+        }
+
+        const auto remainingCompNodeAmount = compNodeAmount - 1;
+
+        if(0 != (msg->m_data.size() % remainingCompNodeAmount)) {
+            spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount - 1);
+
+            throw std::runtime_error("Edge Switch: Scatter message size is not divisible by computing node amount!");
+
+        }
+
+        const auto chunkSize = msg->m_data.size() / remainingCompNodeAmount;
+
+        // Scatter to other down-ports
+        {
+            const std::size_t downPortAmount = getDownPortAmount();
+            const auto firstCompNodeIdx = m_ID * downPortAmount;
+            const auto firstDataIdx = firstCompNodeIdx * chunkSize;
+
+            for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < downPortAmount; ++downPortIdx) {
+                if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
+                    continue;
+                }
+
+                auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
+                uniqueMsg->m_data.reserve(chunkSize);
+                uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+                getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
+
+                dataIdx += chunkSize;
+            }
+
+            // Remove scattered section
+            msg->m_data.erase(msg->m_data.cbegin() + firstDataIdx, msg->m_data.cbegin() + firstDataIdx + (chunkSize * (downPortAmount - 1)));
+        }
+
+        // Re-direct the rest to aggregate switch
+        getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }
 
