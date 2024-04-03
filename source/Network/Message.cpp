@@ -73,7 +73,8 @@ const std::string &Network::Messages::toString(const e_Type eType)
         {e_Type::BarrierRequest,   "BarrierRequest"},
         {e_Type::BarrierRelease,   "BarrierRelease"},
         {e_Type::Reduce,           "Reduce"},
-        {e_Type::ReduceAll,        "ReduceAll"}
+        {e_Type::ReduceAll,        "ReduceAll"},
+        {e_Type::Scatter,          "Scatter"}
     };
 
     return strMap.at(eType);

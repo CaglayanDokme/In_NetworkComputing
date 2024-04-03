@@ -663,21 +663,20 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
             spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount - 1);
 
             throw std::runtime_error("Edge Switch: Scatter message size is not divisible by computing node amount!");
-
         }
 
         const auto chunkSize = msg->m_data.size() / remainingCompNodeAmount;
+        const auto firstCompNodeIdx = m_ID * getDownPortAmount();
+        const auto firstDataIdx = firstCompNodeIdx * chunkSize;
 
         // Scatter to other down-ports
         {
-            const std::size_t downPortAmount = getDownPortAmount();
-            const auto firstCompNodeIdx = m_ID * downPortAmount;
-            const auto firstDataIdx = firstCompNodeIdx * chunkSize;
-
-            for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < downPortAmount; ++downPortIdx) {
+            for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                 if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
                     continue;
                 }
+
+                spdlog::trace("Edge Switch({}): Redirecting section [{}, {}) to down-port #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
 
                 auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
                 uniqueMsg->m_data.reserve(chunkSize);
@@ -687,9 +686,14 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
                 dataIdx += chunkSize;
             }
+        }
 
-            // Remove scattered section
-            msg->m_data.erase(msg->m_data.cbegin() + firstDataIdx, msg->m_data.cbegin() + firstDataIdx + (chunkSize * (downPortAmount - 1)));
+        // Remove scattered section
+        {
+            const std::size_t scatterSize = chunkSize * (getDownPortAmount() - 1);
+
+            spdlog::trace("Edge Switch({}): Removing section [{}, {})..", m_ID, firstDataIdx, firstDataIdx + scatterSize);
+            msg->m_data.erase(msg->m_data.cbegin() + firstDataIdx, msg->m_data.cbegin() + firstDataIdx + scatterSize);
         }
 
         // Re-direct the rest to aggregate switch

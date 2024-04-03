@@ -1,6 +1,7 @@
 #include "Aggregate.hpp"
 #include "spdlog/spdlog.h"
 #include "Network/Message.hpp"
+#include "Network/Derivations.hpp"
 
 using namespace Network::Switches;
 
@@ -576,6 +577,78 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
                                 [](auto& entry) { entry.second = false; return entry; });
             }
         }
+    }
+}
+
+void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
+{
+    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Aggregate Switch({}): Received an empty scatter message from source port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Aggregate Switch: Received an empty scatter message!");
+    }
+
+    static const std::size_t downPortAmount = getDownPortAmount();
+
+    // Decide on direction
+    if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
+        if(msg->m_data.size() % downPortAmount != 0) {
+            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not divisible by down-port amount({})!", m_ID, msg->m_data.size(), downPortAmount);
+
+            throw std::runtime_error("Aggregate Switch: Scatter message size is not divisible by down-port amount!");
+        }
+
+        const std::size_t chunkSize = msg->m_data.size() / downPortAmount;
+
+        for(size_t downPortIdx = 0, dataIdx = 0; downPortIdx < downPortAmount; ++downPortIdx, dataIdx += chunkSize) {
+            auto &targetPort = getDownPort(downPortIdx);
+
+            auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
+            uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+            targetPort.pushOutgoing(std::move(uniqueMsg));
+        }
+    }
+    else { // Coming from a down-port
+        static const std::size_t assocCompNodeAmount     = downPortAmount * downPortAmount;
+        static const std::size_t remainingCompNodeAmount = Network::Utilities::deriveComputingNodeAmount() - (assocCompNodeAmount / downPortAmount);
+        static const std::size_t targetedCompNodeAmount  = assocCompNodeAmount - (assocCompNodeAmount / downPortAmount);
+        const std::size_t firstCompNodeIdx               = (m_ID / downPortAmount) * assocCompNodeAmount;
+
+        if((msg->m_data.size() % remainingCompNodeAmount) != 0) {
+            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), remainingCompNodeAmount);
+
+            throw std::runtime_error("Aggregate Switch: Scatter message size is not divisible by remaining computing node amount!");
+        }
+
+        const std::size_t chunkSize = msg->m_data.size() / remainingCompNodeAmount;
+        const std::size_t firstDataIdx = firstCompNodeIdx * chunkSize;
+
+        for(size_t compNodeIdx = firstCompNodeIdx, dataIdx = firstDataIdx; compNodeIdx < (firstCompNodeIdx + assocCompNodeAmount); ++compNodeIdx) {
+            auto &targetPort = m_downPortTable.at(compNodeIdx);
+
+            if(getPort(sourcePortIdx) == targetPort) {
+                spdlog::trace("Aggregate Switch({}): Skipping the computing node #{} as it is bound to the source port #{}.", m_ID, compNodeIdx, sourcePortIdx);
+
+                continue;
+            }
+
+            spdlog::trace("Aggregate Switch({}): Redirecting section [{}, {}) to computing node #{}..", m_ID, dataIdx, dataIdx + chunkSize, compNodeIdx);
+
+            auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
+            uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+            targetPort.pushOutgoing(std::move(uniqueMsg));
+
+            dataIdx += chunkSize;
+        }
+
+        // Erase scattered data section and re-direct message to a Core switch
+        spdlog::trace("Aggregate Switch({}): Erasing scattered data section [{}, {}) and re-directing to a Core switch..", m_ID, firstDataIdx, firstDataIdx + (chunkSize * targetedCompNodeAmount));
+        msg->m_data.erase(msg->m_data.begin() + firstDataIdx, msg->m_data.begin() + firstDataIdx + (chunkSize * targetedCompNodeAmount));
+        getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }
 
