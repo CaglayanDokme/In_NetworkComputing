@@ -481,8 +481,9 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         const auto chunkSize = data.size() / compNodeAmount;
 
-        std::vector<float> localChunk = std::move(std::vector<float>(data.cbegin(), data.cbegin() + chunkSize));
-        data.erase(data.cbegin(), data.cbegin() + chunkSize);
+        std::vector<float> localChunk;
+        localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + (m_ID * chunkSize) + chunkSize);
+        data.erase(data.cbegin() + (m_ID * chunkSize), data.cbegin() + (m_ID * chunkSize) + chunkSize);
 
         auto msg = std::make_unique<Messages::Scatter>(m_ID);
         msg->m_data = std::move(data);
@@ -500,16 +501,16 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         setState(State::Scatter);
 
-        std::unique_lock lock(m_directReceive.mutex);
-        m_directReceive.notifier.wait(lock);
+        std::unique_lock lock(m_scatter.mutex);
+        m_scatter.notifier.wait(lock);
 
-        if(m_directReceive.sourceID != sourceID) {
-            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_directReceive.sourceID, sourceID);
+        if(m_scatter.sourceID != sourceID) {
+            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_scatter.sourceID, sourceID);
 
             throw std::logic_error("MPI: Invalid source ID!");
         }
 
-        data = std::move(m_directReceive.receivedData);
+        data = std::move(m_scatter.receivedData);
     }
 }
 

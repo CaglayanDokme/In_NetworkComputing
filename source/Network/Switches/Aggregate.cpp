@@ -618,30 +618,29 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
     }
     else { // Coming from a down-port
-        static const std::size_t assocCompNodeAmount     = downPortAmount * downPortAmount;
-        static const std::size_t remainingCompNodeAmount = Network::Utilities::deriveComputingNodeAmount() - (assocCompNodeAmount / downPortAmount);
-        static const std::size_t targetedCompNodeAmount  = assocCompNodeAmount - (assocCompNodeAmount / downPortAmount);
-        const std::size_t firstCompNodeIdx               = (m_ID / downPortAmount) * assocCompNodeAmount;
+        static const std::size_t remainingEdgeAmount = Network::Utilities::deriveEdgeSwitchAmount() - 1;
+        static const std::size_t assocCompNodeAmount = downPortAmount * downPortAmount;
 
-        if((msg->m_data.size() % remainingCompNodeAmount) != 0) {
-            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), remainingCompNodeAmount);
+        if((msg->m_data.size() % remainingEdgeAmount) != 0) {
+            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not divisible by remaining edge switch amount({})!", m_ID, msg->m_data.size(), remainingEdgeAmount);
 
-            throw std::runtime_error("Aggregate Switch: Scatter message size is not divisible by remaining computing node amount!");
+            throw std::runtime_error("Aggregate Switch: Scatter message size is not divisible by remaining edge switch amount!");
         }
 
-        const std::size_t chunkSize = msg->m_data.size() / remainingCompNodeAmount;
-        const std::size_t firstDataIdx = firstCompNodeIdx * chunkSize;
+        const std::size_t chunkSize    = msg->m_data.size() / remainingEdgeAmount;
+        const std::size_t firstEdgeIdx = m_ID - (m_ID % downPortAmount);
+        const std::size_t firstDataIdx = firstEdgeIdx * chunkSize;
 
-        for(size_t compNodeIdx = firstCompNodeIdx, dataIdx = firstDataIdx; compNodeIdx < (firstCompNodeIdx + assocCompNodeAmount); ++compNodeIdx) {
-            auto &targetPort = m_downPortTable.at(compNodeIdx);
+        for(size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < downPortAmount; ++downPortIdx) {
+            auto &targetPort = getDownPort(downPortIdx);
 
             if(getPort(sourcePortIdx) == targetPort) {
-                spdlog::trace("Aggregate Switch({}): Skipping the computing node #{} as it is bound to the source port #{}.", m_ID, compNodeIdx, sourcePortIdx);
+                spdlog::trace("Aggregate Switch({}): Skipping the edge switch #{} as it is bound to the source port #{}.", m_ID, downPortIdx, sourcePortIdx);
 
                 continue;
             }
 
-            spdlog::trace("Aggregate Switch({}): Redirecting section [{}, {}) to computing node #{}..", m_ID, dataIdx, dataIdx + chunkSize, compNodeIdx);
+            spdlog::trace("Aggregate Switch({}): Redirecting section [{}, {}) to edge switch #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
 
             auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
             uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
@@ -652,8 +651,10 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
 
         // Erase scattered data section and re-direct message to a Core switch
-        spdlog::trace("Aggregate Switch({}): Erasing scattered data section [{}, {}) and re-directing to a Core switch..", m_ID, firstDataIdx, firstDataIdx + (chunkSize * targetedCompNodeAmount));
-        msg->m_data.erase(msg->m_data.begin() + firstDataIdx, msg->m_data.begin() + firstDataIdx + (chunkSize * targetedCompNodeAmount));
+        const std::size_t targetedEdgeAmount = downPortAmount - 1;
+
+        spdlog::trace("Aggregate Switch({}): Erasing scattered data section [{}, {}) and re-directing to a Core switch..", m_ID, firstDataIdx, firstDataIdx + (chunkSize * targetedEdgeAmount));
+        msg->m_data.erase(msg->m_data.begin() + firstDataIdx, msg->m_data.begin() + firstDataIdx + (chunkSize * targetedEdgeAmount));
         getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }

@@ -311,8 +311,10 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
     const std::size_t chunkSize = msg->m_data.size() / targetPortAmount;
 
-    for(std::size_t targetPortIdx = 0, dataIdx = 0; targetPortIdx < targetPortAmount; ++targetPortIdx) {
+    for(std::size_t targetPortIdx = 0, dataIdx = 0; targetPortIdx < m_portAmount; ++targetPortIdx) {
         if(sourcePortIdx == targetPortIdx) {
+            spdlog::trace("Core Switch({}): Skipping source port #{}..", m_ID, sourcePortIdx);
+
             continue;
         }
 
