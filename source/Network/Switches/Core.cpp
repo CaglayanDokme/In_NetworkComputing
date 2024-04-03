@@ -73,6 +73,10 @@ bool Core::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::Scatter: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
+                break;
+            }
             default: {
                 spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
                 spdlog::debug("Type name was {}", anyMsg->typeToString());
@@ -284,5 +288,41 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
 
             m_reduceAllStates.bOngoing = false;
         }
+    }
+}
+
+void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
+{
+    spdlog::trace("Core Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Core Switch({}): Received empty scatter message from port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Received empty scatter message!");
+    }
+
+    const std::size_t targetPortAmount = m_portAmount - 1;
+
+    if((msg->m_data.size() % targetPortAmount) != 0) {
+        spdlog::critical("Core Switch({}): Scatter message size({}) is not divisible by target port amount({})!", m_ID, msg->m_data.size(), targetPortAmount);
+
+        throw std::runtime_error("Core Switch: Scatter message size is not divisible by target port amount!");
+    }
+
+    const std::size_t chunkSize = msg->m_data.size() / targetPortAmount;
+
+    for(std::size_t targetPortIdx = 0, dataIdx = 0; targetPortIdx < targetPortAmount; ++targetPortIdx) {
+        if(sourcePortIdx == targetPortIdx) {
+            continue;
+        }
+
+        spdlog::trace("Core Switch({}): Redirecting section [{}, {}) to down-port #{}", m_ID, dataIdx, dataIdx + chunkSize, targetPortIdx);
+
+        auto scatterMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID);
+        scatterMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+        m_ports.at(targetPortIdx).pushOutgoing(std::move(scatterMsg));
+
+        dataIdx += chunkSize;
     }
 }

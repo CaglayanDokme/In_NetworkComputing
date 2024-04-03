@@ -140,6 +140,10 @@ bool Aggregate::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::Scatter: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
+                break;
+            }
             default: {
                 spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
                 spdlog::debug("Type name was {}", anyMsg->typeToString());
@@ -583,6 +587,8 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
 {
     static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+
+    spdlog::trace("Aggregate Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
 
     if(msg->m_data.empty()) {
         spdlog::critical("Aggregate Switch({}): Received an empty scatter message from source port #{}!", m_ID, sourcePortIdx);

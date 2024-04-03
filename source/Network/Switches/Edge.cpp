@@ -625,6 +625,8 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 {
     static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
 
+    spdlog::trace("Edge Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
+
     if(msg->m_data.empty()) {
         spdlog::critical("Edge Switch({}): Received an empty scatter message from source port #{}!", m_ID, sourcePortIdx);
 
