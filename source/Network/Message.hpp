@@ -15,6 +15,7 @@ namespace Network::Messages {
         Reduce,
         ReduceAll,
         Scatter,
+        Gather,
     };
 
     enum class ReduceOperation {
@@ -126,6 +127,18 @@ namespace Network::Messages {
 
     public: /** Addressing **/
         const std::size_t m_sourceID;
+
+    public: /** Data **/
+        std::vector<float> m_data;
+    };
+
+    class Gather : public BaseMessage {
+    public: /** Construction **/
+        Gather() = delete;
+        explicit Gather(const std::size_t destinationID);
+
+    public: /** Addressing **/
+        const std::size_t m_destinationID;
 
     public: /** Data **/
         std::vector<float> m_data;

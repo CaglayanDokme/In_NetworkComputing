@@ -64,6 +64,12 @@ Scatter::Scatter(const std::size_t sourceID)
     // Nothing
 }
 
+Gather::Gather(const std::size_t destinationID)
+: BaseMessage(e_Type::Gather), m_destinationID(destinationID)
+{
+    // Nothing
+}
+
 const std::string &Network::Messages::toString(const e_Type eType)
 {
     static const std::map<e_Type, std::string> strMap {
