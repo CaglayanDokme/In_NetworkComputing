@@ -1,5 +1,6 @@
 #pragma once
 
+#include "InterSwitchMessages.hpp"
 #include "Network/Message.hpp"
 #include "ISwitch.hpp"
 #include <map>
@@ -35,6 +36,7 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
 
     private: /** Members **/
         std::map<std::size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False

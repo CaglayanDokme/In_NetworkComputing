@@ -77,6 +77,10 @@ bool Core::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::IS_Gather: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                break;
+            }
             default: {
                 spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
                 spdlog::debug("Type name was {}", anyMsg->typeToString());
@@ -327,4 +331,26 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
         dataIdx += chunkSize;
     }
+}
+
+void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
+{
+    spdlog::trace("Core Switch({}): Inter-switch gather message received from port #{}", m_ID, sourcePortIdx);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Core Switch({}): Received empty inter-switch gather message from port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Received empty inter-switch gather message!");
+    }
+
+    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
+
+    if(sourcePortIdx == targetPortIdx) {
+        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Target and source ports are the same!");
+    }
+
+    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
