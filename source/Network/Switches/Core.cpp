@@ -74,7 +74,7 @@ bool Core::tick()
                 break;
             }
             case Messages::e_Type::Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Gather: {
@@ -295,41 +295,39 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
+void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     spdlog::trace("Core Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
 
-    if(msg->m_data.empty()) {
-        spdlog::critical("Core Switch({}): Received empty scatter message from port #{}!", m_ID, sourcePortIdx);
+    if(msg->m_data.size() != (compNodePerPort * (m_portAmount - 1))) {
+        spdlog::critical("Core Switch({}): Scatter message size doesn't match! Expected {}, got {}", m_ID, compNodePerPort * (m_portAmount - 1), msg->m_data.size());
 
-        throw std::runtime_error("Core Switch: Received empty scatter message!");
+        throw std::runtime_error("Core Switch: Scatter message size doesn't match!");
     }
 
-    const std::size_t targetPortAmount = m_portAmount - 1;
-
-    if((msg->m_data.size() % targetPortAmount) != 0) {
-        spdlog::critical("Core Switch({}): Scatter message size({}) is not divisible by target port amount({})!", m_ID, msg->m_data.size(), targetPortAmount);
-
-        throw std::runtime_error("Core Switch: Scatter message size is not divisible by target port amount!");
-    }
-
-    const std::size_t chunkSize = msg->m_data.size() / targetPortAmount;
-
-    for(std::size_t targetPortIdx = 0, dataIdx = 0; targetPortIdx < m_portAmount; ++targetPortIdx) {
+    for(size_t targetPortIdx = 0; targetPortIdx < m_ports.size(); ++targetPortIdx) {
         if(sourcePortIdx == targetPortIdx) {
-            spdlog::trace("Core Switch({}): Skipping source port #{}..", m_ID, sourcePortIdx);
-
             continue;
         }
 
-        spdlog::trace("Core Switch({}): Redirecting section [{}, {}) to down-port #{}", m_ID, dataIdx, dataIdx + chunkSize, targetPortIdx);
+        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+        txMsg->m_data.resize(compNodePerPort);
 
-        auto scatterMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID);
-        scatterMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+        const auto firstCompNodeIdx = targetPortIdx * compNodePerPort;
+        for(size_t compNodeIdx = firstCompNodeIdx; compNodeIdx < (firstCompNodeIdx + compNodePerPort); ++compNodeIdx) {
+            auto iterator = std::find_if(msg->m_data.begin(), msg->m_data.end(), [compNodeIdx](const auto& entry) { return entry.first == compNodeIdx; });
+            if(msg->m_data.end() == iterator) {
+                spdlog::critical("Core Switch({}): Computing node #{} is not found in the scatter message!", m_ID, compNodeIdx);
 
-        m_ports.at(targetPortIdx).pushOutgoing(std::move(scatterMsg));
+                throw std::runtime_error("Core Switch: Computing node is not found in the scatter message!");
+            }
 
-        dataIdx += chunkSize;
+            txMsg->m_data.at(compNodeIdx - firstCompNodeIdx).first = compNodeIdx;
+            txMsg->m_data.at(compNodeIdx - firstCompNodeIdx).second = std::move(iterator->second);
+            msg->m_data.erase(iterator); // Accelerate the search for the next computing node
+        }
+
+        m_ports.at(targetPortIdx).pushOutgoing(std::move(txMsg));
     }
 }
 
