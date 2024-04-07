@@ -492,9 +492,8 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
         }
 
         const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
-        const auto remainder = data.size() % compNodeAmount;
 
-        if(0 != remainder) {
+        if(0 != (data.size() % compNodeAmount)) {
             spdlog::critical("MPI({}): Data size({}) is not divisible by the computing node amount({})!", m_ID, data.size(), compNodeAmount);
 
             throw std::runtime_error("MPI: Data size is not divisible by the computing node amount!");
@@ -503,14 +502,14 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
         const auto chunkSize = data.size() / compNodeAmount;
 
         std::vector<float> localChunk;
-        localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + (m_ID * chunkSize) + chunkSize);
-        data.erase(data.cbegin() + (m_ID * chunkSize), data.cbegin() + (m_ID * chunkSize) + chunkSize);
+        localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
+        data.erase(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
 
         auto msg = std::make_unique<Messages::Scatter>(m_ID);
         msg->m_data = std::move(data);
-        data = std::move(localChunk);
-
         m_port.pushOutgoing(std::move(msg));
+
+        data = std::move(localChunk);
     }
     else {
         if(!data.empty()) {
