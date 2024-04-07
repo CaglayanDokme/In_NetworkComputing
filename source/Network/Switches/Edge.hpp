@@ -1,5 +1,6 @@
 #pragma  once
 
+#include "InterSwitchMessages.hpp"
 #include "Network/Message.hpp"
 #include "ISwitch.hpp"
 #include <map>
@@ -53,6 +54,8 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
 
         /**
          * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)
@@ -68,6 +71,7 @@ namespace Network::Switches {
         [[nodiscard]] std::size_t getUpPortAmount() const;
 
     private: /** Members **/
+        const std::size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
         std::map<std::size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
         std::map<std::size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
 
@@ -91,6 +95,34 @@ namespace Network::Switches {
                 decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp, toDown;
         } m_reduceAllStates;
+
+        struct GatherState {
+            struct {
+                bool bOngoing{false};                                  // True if a gather operation is ongoing
+                std::size_t destinationID;                             // ID of the destined computing node (i.e. root process of gather operation)
+                decltype(Messages::InterSwitch::Gather::m_data) value; // Current gathered value
+            } toUp;
+
+            struct ToDown {
+                bool bOngoing{false};                                   // True if a gather operation is ongoing
+                std::size_t destinationID;                              // ID of the destined computing node (i.e. root process of gather operation)
+                std::vector<decltype(Messages::Gather::m_data)> value;  // Current gathered value
+
+                /**
+                 * @brief Push data to the gather buffer
+                 * @param compNodeIdx Index of the computing node that sent the data
+                 * @param destID      ID of the destined computing node
+                 * @param data        Data to be gathered
+                 * @return True if the data is ready to be redirected to the destined computing node
+                 */
+                [[nodiscard]] bool push(const std::size_t compNodeIdx, const std::size_t destID, decltype(Messages::Gather::m_data) &&data);
+
+                /**
+                 * @brief Reset the gather buffer to initial state
+                 */
+                void reset();
+            } toDown;
+        } m_gatherStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total
     };

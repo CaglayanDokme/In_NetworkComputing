@@ -13,6 +13,7 @@ set(SOURCES
     source/Network/Switches/Aggregate.cpp
     source/Network/Switches/ISwitch.cpp
     source/Network/Switches/Edge.cpp
+    source/Network/Switches/InterSwitchMessages.cpp
     source/Computer.cpp
     source/Network/MPI.cpp
     source/Network/Message.cpp
@@ -26,6 +27,7 @@ set(HEADERS
     source/Network/Switches/Aggregate.hpp
     source/Network/Switches/ISwitch.hpp
     source/Network/Switches/Edge.hpp
+    source/Network/Switches/InterSwitchMessages.hpp
     source/Computer.hpp
     source/Network/MPI.hpp
     source/Network/Message.hpp
