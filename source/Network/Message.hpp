@@ -16,7 +16,10 @@ namespace Network::Messages {
         ReduceAll,
         Scatter,
         Gather,
-        IS_Gather   // Inter-switch gather
+
+        // Inter-switch messages
+        IS_Scatter,
+        IS_Gather,
     };
 
     enum class ReduceOperation {

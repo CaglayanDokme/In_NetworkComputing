@@ -82,7 +82,9 @@ const std::string &Network::Messages::toString(const e_Type eType)
         {e_Type::ReduceAll,        "ReduceAll"},
         {e_Type::Scatter,          "Scatter"},
         {e_Type::Gather,           "Gather"},
-        {e_Type::IS_Gather,        "Inter-Switch Gather"}
+
+        {e_Type::IS_Scatter,       "Inter-Switch Scatter"},
+        {e_Type::IS_Gather,        "Inter-Switch Gather"},
     };
 
     return strMap.at(eType);
@@ -94,7 +96,7 @@ const std::string &Network::Messages::toString(const ReduceOperation opType)
         {ReduceOperation::Sum,      "Sum"},
         {ReduceOperation::Multiply, "Multiply"},
         {ReduceOperation::Max,      "Max"},
-        {ReduceOperation::Min,      "Min"}
+        {ReduceOperation::Min,      "Min"},
     };
 
     return strMap.at(opType);
