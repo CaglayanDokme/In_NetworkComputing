@@ -943,6 +943,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 
     // Redirect to computing nodes
+    const auto refSize = msg->m_data.at(0).second.size();
     for(size_t compNodeIdx = firstCompNodeIdx; compNodeIdx < (firstCompNodeIdx + getDownPortAmount()); ++compNodeIdx) {
         const auto count = std::count_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
 
@@ -954,6 +955,12 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         else if(1 == count) {
             auto txMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID);
             txMsg->m_data = std::move(std::find_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; })->second);
+
+            if(txMsg->m_data.size() != refSize) {
+                spdlog::critical("Edge({}): Scatter message size({}) for computing node #{} is different from the expected({})!", m_ID, txMsg->m_data.size(), compNodeIdx, refSize);
+
+                throw std::runtime_error("Edge: Scatter message size is different from the expected!");
+            }
 
             m_downPortTable.at(compNodeIdx).pushOutgoing(std::move(txMsg));
         }
