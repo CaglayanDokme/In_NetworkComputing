@@ -514,6 +514,48 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
     }
 }
 
+void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
+{
+    spdlog::trace("MPI({}): Gathering data at {}", m_ID, destinationID);
+
+    if(data.empty()) {
+        spdlog::critical("MPI({}): Empty data given to gather!", m_ID);
+
+        throw std::invalid_argument("MPI: Empty data given to gather!");
+    }
+
+    if(m_ID == destinationID) {
+        setState(State::Gather);
+
+        std::unique_lock lock(m_gather.mutex);
+        m_gather.notifier.wait(lock);
+
+        if((m_gather.receivedData.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
+            spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, m_gather.receivedData.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
+
+            throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
+        }
+
+        const auto chunkSize = m_gather.receivedData.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
+        spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
+
+        if(data.size() != chunkSize) {
+            spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
+
+            throw std::runtime_error("MPI: Expected data size doesn't match the received chunk size!");
+        }
+
+        m_gather.receivedData.insert(m_gather.receivedData.cbegin() + (m_ID * chunkSize), data.cbegin(), data.cend());
+        data = std::move(m_gather.receivedData);
+    }
+    else {
+        auto msg = std::make_unique<Messages::Gather>(destinationID);
+        msg->m_data = data;
+
+        m_port.pushOutgoing(std::move(msg));
+    }
+}
+
 void MPI::setState(const State state)
 {
     if(State::Idle == state) {
