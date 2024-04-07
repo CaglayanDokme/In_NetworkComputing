@@ -1,5 +1,6 @@
 #pragma  once
 
+#include "InterSwitchMessages.hpp"
 #include "Network/Message.hpp"
 #include "ISwitch.hpp"
 #include <map>
@@ -53,6 +54,7 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
 
         /**
          * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)

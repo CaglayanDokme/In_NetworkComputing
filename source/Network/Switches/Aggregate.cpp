@@ -144,6 +144,10 @@ bool Aggregate::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::IS_Gather: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                break;
+            }
             default: {
                 spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
                 spdlog::debug("Type name was {}", anyMsg->typeToString());
@@ -656,6 +660,50 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         spdlog::trace("Aggregate Switch({}): Erasing scattered data section [{}, {}) and re-directing to a Core switch..", m_ID, firstDataIdx, firstDataIdx + (chunkSize * targetedEdgeAmount));
         msg->m_data.erase(msg->m_data.begin() + firstDataIdx, msg->m_data.begin() + firstDataIdx + (chunkSize * targetedEdgeAmount));
         getAvailableUpPort().pushOutgoing(std::move(msg));
+    }
+}
+
+void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
+{
+    spdlog::trace("Aggregate Switch({}): Gather message received from port #{}", m_ID, sourcePortIdx);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Aggregate Switch({}): Received an empty gather message from source port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Aggregate Switch: Received an empty gather message!");
+    }
+
+    const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
+
+    if(bDownPort) {
+        // Decide on direction (up or down)
+        if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
+            spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+
+            if(getPort(sourcePortIdx) == search->second) {
+                spdlog::critical("Aggregate Switch({}): Gather message is destined to the same down-port!", m_ID);
+
+                throw std::runtime_error("Aggregate Switch: Gather message is destined to the same down-port!");
+            }
+
+            search->second.pushOutgoing(std::move(msg));
+        }
+        else {
+            spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+            getAvailableUpPort().pushOutgoing(std::move(msg));
+        }
+    }
+    else {
+        auto search = m_downPortTable.find(msg->m_destinationID);
+
+        if(search == m_downPortTable.end()) {
+            spdlog::critical("Aggregate Switch({}): Gather message is not destined to a down-port!", m_ID);
+
+            throw std::runtime_error("Aggregate Switch: Gather message is not destined to a down-port!");
+        }
+
+        search->second.pushOutgoing(std::move(msg));
     }
 }
 

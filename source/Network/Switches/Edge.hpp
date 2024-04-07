@@ -101,12 +101,14 @@ namespace Network::Switches {
                 bool bOngoing{false};                                  // True if a gather operation is ongoing
                 std::size_t destinationID;                             // ID of the destined computing node (i.e. root process of gather operation)
                 decltype(Messages::InterSwitch::Gather::m_data) value; // Current gathered value
+                std::size_t refSize;                                    // Expected size of the gathered data
             } toUp;
 
             struct ToDown {
                 bool bOngoing{false};                                   // True if a gather operation is ongoing
                 std::size_t destinationID;                              // ID of the destined computing node (i.e. root process of gather operation)
                 std::vector<decltype(Messages::Gather::m_data)> value;  // Current gathered value
+                std::size_t refSize;                                    // Expected size of the gathered data
 
                 /**
                  * @brief Push data to the gather buffer

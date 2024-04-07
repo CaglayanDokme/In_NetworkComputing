@@ -819,22 +819,8 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
                 throw std::runtime_error("Edge: Destination IDs mismatch in gather messages!");
             }
 
-            const std::size_t refSize = [&values = state.value]() -> std::size_t {
-                for(const auto &entry : values) {
-                    const auto &data = entry.second;
-
-                    if(data.empty()) {
-                        continue;
-                    }
-
-                    return data.size();
-                }
-
-                return 0;
-            }();
-
-            if(refSize != msg->m_data.size()) {
-                spdlog::critical("Edge({}): Data size mismatch in gather messages! Expected {}, received {}", m_ID, refSize, msg->m_data.size());
+            if(state.refSize != msg->m_data.size()) {
+                spdlog::critical("Edge({}): Data size mismatch in gather messages! Expected {}, received {}", m_ID, state.refSize, msg->m_data.size());
 
                 throw std::runtime_error("Edge: Data size mismatch in gather messages!");
             }
@@ -886,6 +872,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
             }
 
             state.value.at(sourcePortIdx - getUpPortAmount()).second = std::move(msg->m_data);
+            state.refSize = state.value.at(sourcePortIdx - getUpPortAmount()).second.size();
         }
     }
     else {
@@ -998,24 +985,18 @@ bool Edge::GatherState::ToDown::push(const std::size_t compNodeIdx, const std::s
         throw std::runtime_error("Edge: Gather state value size is corrupted!");
     }
 
+    if(data.empty()) {
+        spdlog::critical("Edge: Gather message cannot be empty! Source node #{}", compNodeIdx);
+
+        throw std::invalid_argument("Edge: Gather message cannot be empty!");
+    }
+
     if(bOngoing) {
         if(destinationID != destID) {
             spdlog::critical("Edge: Destination IDs mismatch in gather messages! Expected {}, received {}", destinationID, destID);
 
             throw std::runtime_error("Edge: Destination IDs mismatch in gather messages!");
         }
-
-        const std::size_t refSize = [&]() -> std::size_t {
-            for(const auto &data : value) {
-                if(data.empty()) {
-                    continue;
-                }
-
-                return data.size();
-            }
-
-            return 0;
-        }();
 
         if(refSize != data.size()) {
             spdlog::critical("Edge: Data size mismatch in gather messages! Expected {}, received {}", refSize, data.size());
@@ -1045,6 +1026,7 @@ bool Edge::GatherState::ToDown::push(const std::size_t compNodeIdx, const std::s
         }
 
         value.at(compNodeIdx) = std::move(data);
+        refSize = value.at(compNodeIdx).size();
     }
 
     return false;
