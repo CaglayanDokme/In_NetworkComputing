@@ -605,10 +605,10 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
     // Decide on direction
     if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
-        if(msg->m_data.size() == assocCompNodeAmount) {
-            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is equal to associated computing node amount({})!", m_ID, msg->m_data.size(), assocCompNodeAmount);
+        if(msg->m_data.size() != assocCompNodeAmount) {
+            spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not equal to associated computing node amount({})!", m_ID, msg->m_data.size(), assocCompNodeAmount);
 
-            throw std::runtime_error("Aggregate Switch: Scatter message size is equal to associated computing node amount!");
+            throw std::runtime_error("Aggregate Switch: Scatter message size is not equal to associated computing node amount!");
         }
 
         // Redirect to down-ports (e.g. edge switches)

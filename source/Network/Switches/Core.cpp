@@ -73,7 +73,7 @@ bool Core::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
                 break;
             }
-            case Messages::e_Type::Scatter: {
+            case Messages::e_Type::IS_Scatter: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
                 break;
             }

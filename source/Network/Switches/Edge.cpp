@@ -778,7 +778,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
     {
         auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
 
-        txMsg->m_data.reserve(remainingCompNodeAmount);
+        txMsg->m_data.resize(remainingCompNodeAmount);
 
         for(std::size_t i = 0; i < remainingCompNodeAmount; ++i) {
             auto &targetData = txMsg->m_data.at(i).second;
