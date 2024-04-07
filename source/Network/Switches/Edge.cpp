@@ -195,6 +195,10 @@ bool Edge::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::IS_Scatter: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
+                break;
+            }
             case Messages::e_Type::IS_Gather: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
                 break;
@@ -707,8 +711,6 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
         throw std::invalid_argument("Edge: Null message given!");
     }
 
-    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
-
     spdlog::trace("Edge Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
 
     if(msg->m_data.empty()) {
@@ -717,61 +719,48 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
         throw std::runtime_error("Edge Switch: Received an empty scatter message!");
     }
 
-    // Decide on direction
     if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
-        if(0 != (msg->m_data.size() % getDownPortAmount())) {
-            spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by down-port amount({})!", m_ID, msg->m_data.size(), getDownPortAmount());
+        spdlog::critical("Edge Switch({}): Scatter message received from an up-port!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Scatter message size is not divisible by down-port amount!");
-        }
+        throw std::runtime_error("Edge Switch: Scatter message received from an up-port!");
+    }
 
-        const auto chunkSize = msg->m_data.size() / getDownPortAmount();
+    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
 
-        // Scatter to down-ports
-        for(std::size_t downPortIdx = 0, dataIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx, dataIdx += chunkSize) {
+    if(m_downPortTable.at(msg->m_sourceID) != getPort(sourcePortIdx)) {
+        spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID, sourcePortIdx);
+
+        throw std::runtime_error("Edge Switch: Source ID and source port index didn't match in scatter message!");
+    }
+
+    auto remainingCompNodeAmount = compNodeAmount - 1;
+
+    if(0 != (msg->m_data.size() % remainingCompNodeAmount)) {
+        spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount - 1);
+
+        throw std::runtime_error("Edge Switch: Scatter message size is not divisible by computing node amount!");
+    }
+
+    const auto chunkSize = msg->m_data.size() / remainingCompNodeAmount;
+
+    // Scatter to other down-ports
+    {
+        const auto firstDataIdx = firstCompNodeIdx * chunkSize;
+
+        for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
+                continue;
+            }
+
+            spdlog::trace("Edge Switch({}): Redirecting section [{}, {}) to down-port #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
+
             auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
             uniqueMsg->m_data.reserve(chunkSize);
             uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
 
             getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
-        }
-    }
-    else { // Coming from a down-port
-        if(m_downPortTable.at(msg->m_sourceID) != getPort(sourcePortIdx)) {
-            spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID, sourcePortIdx);
 
-            throw std::runtime_error("Edge Switch: Source ID and source port index didn't match in scatter message!");
-        }
-
-        const auto remainingCompNodeAmount = compNodeAmount - 1;
-
-        if(0 != (msg->m_data.size() % remainingCompNodeAmount)) {
-            spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount - 1);
-
-            throw std::runtime_error("Edge Switch: Scatter message size is not divisible by computing node amount!");
-        }
-
-        const auto chunkSize = msg->m_data.size() / remainingCompNodeAmount;
-        const auto firstCompNodeIdx = m_ID * getDownPortAmount();
-        const auto firstDataIdx = firstCompNodeIdx * chunkSize;
-
-        // Scatter to other down-ports
-        {
-            for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
-                    continue;
-                }
-
-                spdlog::trace("Edge Switch({}): Redirecting section [{}, {}) to down-port #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
-
-                auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
-                uniqueMsg->m_data.reserve(chunkSize);
-                uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
-
-                getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
-
-                dataIdx += chunkSize;
-            }
+            dataIdx += chunkSize;
         }
 
         // Remove scattered section
@@ -781,9 +770,25 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
             spdlog::trace("Edge Switch({}): Removing section [{}, {})..", m_ID, firstDataIdx, firstDataIdx + scatterSize);
             msg->m_data.erase(msg->m_data.cbegin() + firstDataIdx, msg->m_data.cbegin() + firstDataIdx + scatterSize);
         }
+    }
 
-        // Re-direct the rest to aggregate switch
-        getAvailableUpPort().pushOutgoing(std::move(msg));
+    remainingCompNodeAmount = compNodeAmount - getDownPortAmount();
+
+    // Re-direct the rest to aggregate switch
+    {
+        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+
+        txMsg->m_data.reserve(remainingCompNodeAmount);
+
+        for(std::size_t i = 0; i < remainingCompNodeAmount; ++i) {
+            auto &targetData = txMsg->m_data.at(i).second;
+            txMsg->m_data.at(i).first = (i < firstCompNodeIdx) ? i : (i + getDownPortAmount());
+
+            targetData.resize(chunkSize);
+            std::copy(msg->m_data.cbegin() + (i * chunkSize), msg->m_data.cbegin() + ((i + 1) * chunkSize), targetData.begin());
+        }
+
+        getAvailableUpPort().pushOutgoing(std::move(txMsg));
     }
 }
 
@@ -907,6 +912,55 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
 
             // Reset state
             state.reset();
+        }
+    }
+}
+
+void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
+{
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Edge({}): Scatter message cannot be empty!", m_ID);
+
+        throw std::invalid_argument("Edge: Scatter message cannot be empty!");
+    }
+
+    if(sourcePortIdx >= getUpPortAmount()) {
+        spdlog::critical("Edge({}): Scatter message received from down-port #{}!", m_ID, sourcePortIdx - getUpPortAmount());
+
+        throw std::runtime_error("Edge: Scatter message received from an down-port!");
+    }
+
+    if(msg->m_data.size() != getDownPortAmount()) {
+        spdlog::critical("Edge({}): Scatter message size({}) is different from the expected({})!", m_ID, msg->m_data.size(), getDownPortAmount());
+
+        throw std::runtime_error("Edge: Scatter message size is different from the expected!");
+    }
+
+    // Redirect to computing nodes
+    for(size_t compNodeIdx = firstCompNodeIdx; compNodeIdx < (firstCompNodeIdx + getDownPortAmount()); ++compNodeIdx) {
+        const auto count = std::count_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
+
+        if(0 == count) {
+            spdlog::critical("Edge({}): Scatter message doesn't contain computing node #{}!", m_ID, compNodeIdx);
+
+            throw std::runtime_error("Edge: Scatter message doesn't contain computing node!");
+        }
+        else if(1 == count) {
+            auto txMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID);
+            txMsg->m_data = std::move(std::find_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; })->second);
+
+            m_downPortTable.at(compNodeIdx).pushOutgoing(std::move(txMsg));
+        }
+        else {
+            spdlog::critical("Edge({}): Scatter message contains computing node #{} more than once({})!", m_ID, compNodeIdx, count);
+
+            throw std::runtime_error("Edge: Scatter message contains a computing node more than once!");
         }
     }
 }
