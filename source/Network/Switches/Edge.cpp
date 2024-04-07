@@ -122,7 +122,19 @@ Edge::Edge(const std::size_t portAmount)
 
         // To-down
         {
-            m_gatherStates.toUp.value.resize(Utilities::deriveComputingNodeAmount());
+            m_gatherStates.toDown.value.resize(Utilities::deriveComputingNodeAmount());
+        }
+
+        if(m_gatherStates.toUp.value.size() != getDownPortAmount()) {
+            spdlog::critical("Edge Switch({}): Amount of to-up gather requests is not equal to down-port amount!", m_ID);
+
+            throw std::runtime_error("Invalid mapping!");
+        }
+
+        if(m_gatherStates.toDown.value.size() != Utilities::deriveComputingNodeAmount()) {
+            spdlog::critical("Edge Switch({}): Amount of to-down gather requests is not equal to computing node amount!", m_ID);
+
+            throw std::runtime_error("Invalid mapping!");
         }
     }
 }

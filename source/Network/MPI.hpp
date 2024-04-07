@@ -188,6 +188,7 @@ namespace Network {
         // Gather
         struct {
             decltype(Messages::Gather::m_data) receivedData;
+            size_t destinationID{0};
             std::mutex mutex;
             std::condition_variable notifier;
         } m_gather;

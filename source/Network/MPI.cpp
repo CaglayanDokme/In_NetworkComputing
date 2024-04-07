@@ -189,6 +189,27 @@ void MPI::tick()
 
             break;
         }
+        case State::Gather: {
+            if(anyMsg->type() != Messages::e_Type::Gather) {
+                spdlog::critical("MPI({}): Received a message of type {} while in gather state!", m_ID, anyMsg->typeToString());
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::Gather *>(anyMsg.release());
+
+            {
+                std::lock_guard lock(m_gather.mutex);
+
+                m_gather.receivedData = std::move(msg.m_data);
+                m_gather.destinationID = msg.m_destinationID;
+            }
+
+            setState(State::Idle);
+            m_gather.notifier.notify_one();
+
+            break;
+        }
         default: {
             spdlog::critical("MPI({}): Invalid state({})!", m_ID, static_cast<int>(m_state));
             throw std::logic_error("Invalid MPI state!");
@@ -529,6 +550,12 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
 
         std::unique_lock lock(m_gather.mutex);
         m_gather.notifier.wait(lock);
+
+        if(m_gather.destinationID != destinationID) {
+            spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, m_gather.destinationID, destinationID);
+
+            throw std::logic_error("MPI: Invalid destination ID!");
+        }
 
         if((m_gather.receivedData.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
             spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, m_gather.receivedData.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
