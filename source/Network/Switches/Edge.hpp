@@ -135,7 +135,11 @@ namespace Network::Switches {
                 decltype(Messages::InterSwitch::AllGather::m_data) value; // Current gathered value
             } toUp;
 
-            // TODO Declare to-down state
+            struct {
+                bool bOngoing{false};                                                   // True if an all-gather operation is ongoing
+                std::map<std::size_t, bool> receiveFlags;                               // Key: Port index(Up-port), Value: True/False
+                decltype(Messages::InterSwitch::AllGather::m_data) value;  // Current gathered value
+            } toDown;
         } m_allGatherStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of edge switches in total

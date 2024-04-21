@@ -137,6 +137,22 @@ Edge::Edge(const std::size_t portAmount)
             throw std::runtime_error("Invalid mapping!");
         }
     }
+
+    // Initialize all-gather state(s)
+    {
+        // To-down
+        {
+            for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                m_allGatherStates.toDown.receiveFlags.insert({upPortIdx, false});
+            }
+        }
+
+        if(m_allGatherStates.toDown.receiveFlags.size() != getUpPortAmount()) {
+            spdlog::critical("Edge Switch({}): Amount of to-down all-gather requests is not equal to up-port amount!", m_ID);
+
+            throw std::runtime_error("Invalid mapping!");
+        }
+    }
 }
 
 bool Edge::tick()
@@ -1097,7 +1113,91 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
 
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
-    // TODO Implement
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Edge({}): {} message cannot be empty!", m_ID, msg->typeToString());
+
+        throw std::invalid_argument("Edge: All-gather message cannot be empty!");
+    }
+
+    if(sourcePortIdx >= getUpPortAmount()) {
+        spdlog::critical("Edge({}): {} message received from down-port #{}!", m_ID, msg->typeToString(), sourcePortIdx - getUpPortAmount());
+
+        throw std::runtime_error("Edge: All-gather message received from an down-port!");
+    }
+
+    auto &state = m_allGatherStates.toDown;
+
+    if(state.bOngoing) {
+        spdlog::trace("Edge({}): All-gather message received from port #{}", m_ID, sourcePortIdx);
+
+        if(state.receiveFlags.at(sourcePortIdx)) {
+            spdlog::critical("Edge({}): This port({}) has already sent an all-gather message!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Edge: This port has already sent an all-gather message!");
+        }
+
+        if(state.value != msg->m_data) {
+            spdlog::critical("Edge({}): All-gather message data is different from the expected!", m_ID);
+
+            throw std::runtime_error("Edge: All-gather message data is different from the expected!");
+        }
+
+        if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
+            spdlog::debug("Edge({}): All computing nodes have sent their all-gather messages..", m_ID);
+
+            for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                spdlog::trace("Edge({}): Preparing all-gather message for down-port #{}..", m_ID, downPortIdx);
+
+                auto txMsg = std::make_unique<Messages::AllGather>();
+
+                txMsg->m_data.reserve(state.value.size() * state.value.at(0).second.size());
+
+                const size_t refDataSize = state.value.at(0).second.size();
+                for(auto &compNodeData : state.value) {
+                    if(compNodeData.second.size() != refDataSize) {
+                        spdlog::critical("Edge({}): All-gather message chunk data size is different from the expected!", m_ID);
+                        spdlog::debug("Edge({}): Expected size {}, detected size for computing node #{} is {}", m_ID, refDataSize, compNodeData.first, compNodeData.second.size());
+
+                        throw std::runtime_error("Edge: All-gather message data size is different from the expected!");
+                    }
+
+                    txMsg->m_data.insert(txMsg->m_data.end(), compNodeData.second.cbegin(), compNodeData.second.cend());
+                }
+
+                getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
+            }
+
+            // Reset state
+            state.bOngoing = false;
+            std::transform(state.receiveFlags.begin(),
+                            state.receiveFlags.end(),
+                            std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                            [](auto &entry) { entry.second = false; return entry; });
+            state.value.clear();
+        }
+        else {
+            state.receiveFlags.at(sourcePortIdx) = true;
+        }
+    }
+    else {
+        spdlog::debug("Edge({}): Initiating all-gather operation to-down..", m_ID);
+
+        if(m_allGatherStates.toDown.receiveFlags.size() != getUpPortAmount()) {
+            spdlog::critical("Edge Switch({}): Amount of to-down all-gather requests is not equal to up-port amount!", m_ID);
+
+            throw std::runtime_error("Invalid mapping!");
+        }
+
+        state.bOngoing = true;
+        state.receiveFlags.at(sourcePortIdx) = true;
+        state.value = std::move(msg->m_data);
+    }
 }
 
 Network::Port &Edge::getAvailableUpPort()
