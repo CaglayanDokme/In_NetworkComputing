@@ -71,6 +71,8 @@ namespace Network::Switches {
         [[nodiscard]] std::size_t getUpPortAmount() const;
 
     private: /** Members **/
+        const std::size_t assocCompNodeAmount;
+        const std::size_t firstCompNodeIdx;
         std::map<std::size_t, Port&> m_downPortTable; // Re-direction table for down-ports
         std::map<std::size_t, bool> m_barrierReleaseFlags; // Key: Computation node index, Value: True/False
 
@@ -91,6 +93,14 @@ namespace Network::Switches {
                 decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp, toDown;
         } m_reduceAllStates;
+
+        struct {
+            struct {
+                bool bOngoing{false};                                       // True if an all-gather operation is ongoing
+                std::map<std::size_t, bool> receiveFlags;                   // Key: Port index (Only down-ports or only up-ports), Value: True/False
+                decltype(Messages::InterSwitch::AllGather::m_data) value;   // Current all-gather value
+            } toUp, toDown;
+        } m_allGatherStates;
 
         inline static std::size_t nextID = 0; // i.e. Number of aggregate switches in total
     };

@@ -6,15 +6,13 @@
 using namespace Network::Switches;
 
 Aggregate::Aggregate(const std::size_t portAmount)
-: ISwitch(nextID++, portAmount)
+: ISwitch(nextID++, portAmount), assocCompNodeAmount(getDownPortAmount() * getDownPortAmount()), firstCompNodeIdx((m_ID / getDownPortAmount()) * assocCompNodeAmount)
 {
     spdlog::trace("Created aggregate switch with ID #{}", m_ID);
 
     // Calculate look-up table for re-direction to down ports
     {
-        const std::size_t downPortAmount        = getDownPortAmount();
-        const std::size_t assocCompNodeAmount   = downPortAmount * downPortAmount;
-        const std::size_t firstCompNodeIdx      = (m_ID / downPortAmount) * assocCompNodeAmount;
+        const std::size_t downPortAmount = getDownPortAmount();
 
         for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
             for(size_t edgeDownPortIdx = 0; edgeDownPortIdx < downPortAmount; ++edgeDownPortIdx) {
@@ -85,6 +83,39 @@ Aggregate::Aggregate(const std::size_t portAmount)
 
             if(m_reduceAllStates.toDown.receiveFlags.size() != getUpPortAmount()) {
                 spdlog::critical("Edge Switch({}): Amount of down-port reduce-all requests is not equal to up-port amount!", m_ID);
+
+                throw std::runtime_error("Invalid mapping!");
+            }
+        }
+    }
+
+    // Initialize all-gather state
+    {
+        // To-up
+        {
+            // Down-port receive flags
+            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+                m_allGatherStates.toUp.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_allGatherStates.toUp.receiveFlags.size() != getDownPortAmount()) {
+                spdlog::critical("Edge Switch({}): Amount of up-port all-gather requests is not equal to down-port amount!", m_ID);
+                spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getUpPortAmount(), m_allGatherStates.toUp.receiveFlags.size());
+
+                throw std::runtime_error("Invalid mapping!");
+            }
+        }
+
+        // To-down
+        {
+            // Up-port receive flags
+            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
+                m_allGatherStates.toDown.receiveFlags.insert({portIdx, false});
+            }
+
+            if(m_allGatherStates.toDown.receiveFlags.size() != getUpPortAmount()) {
+                spdlog::critical("Edge Switch({}): Amount of down-port all-gather requests is not equal to up-port amount!", m_ID);
+                spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getDownPortAmount(), m_allGatherStates.toDown.receiveFlags.size());
 
                 throw std::runtime_error("Invalid mapping!");
             }
@@ -596,8 +627,6 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 {
     static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
     static const auto downPortAmount = getDownPortAmount();
-    static const auto assocCompNodeAmount = downPortAmount * downPortAmount;
-    const std::size_t firstCompNodeIdx = (m_ID / downPortAmount) * assocCompNodeAmount;
 
     spdlog::trace("Aggregate Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
 
@@ -723,7 +752,112 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
-    // TODO Implement
+    if(!msg) {
+        spdlog::critical("Aggregate Switch({}): Received an empty {} message from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+
+        throw std::runtime_error("Aggregate Switch: Received an empty message!");
+    }
+
+    spdlog::trace("Aggregate Switch({}): {} message received from port #{}", m_ID, msg->typeToString(), sourcePortIdx);
+
+    const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
+
+    if(bDownPort) {
+        auto &state = m_allGatherStates.toUp;
+
+        if(state.bOngoing) {
+            if((state.value.size() % msg->m_data.size()) != 0) {
+                spdlog::critical("Aggregate Switch({}): Received a {} message with invalid length from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+                spdlog::debug("Aggregate Switch({}): Expected length was a multiple of {}, got {} (Expected might be wrong as well!)", m_ID, msg->m_data.size(), state.value.size());
+
+                throw std::runtime_error("Aggregate Switch: Received an all-gather message with invalid length!");
+            }
+
+            state.value.insert(state.value.end(), msg->m_data.cbegin(), msg->m_data.cend());
+            state.receiveFlags.at(sourcePortIdx) = true;
+
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                spdlog::trace("Aggregate Switch({}): All-gather message received from all down-ports! Re-directing..", m_ID);
+
+                for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                    auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+                    txMsg->m_data = state.value;
+
+                    getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
+                }
+
+                state.bOngoing = false;
+                state.value.clear();
+                std::transform(state.receiveFlags.begin(),
+                                state.receiveFlags.end(),
+                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                                [](auto& entry) { entry.second = false; return entry; });
+            }
+        }
+        else {
+            if(state.receiveFlags.size() != getDownPortAmount()) {
+                spdlog::critical("Aggregate Switch({}): Amount of up-port all-gather requests is not equal to down-port amount!", m_ID);
+                spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getDownPortAmount(), state.receiveFlags.size());
+
+                throw std::runtime_error("Aggregate Switch: Invalid mapping!");
+            }
+
+            state.bOngoing = true;
+            state.value = std::move(msg->m_data);
+            state.receiveFlags.at(sourcePortIdx) = true;
+        }
+    }
+    else {
+        auto &state = m_allGatherStates.toDown;
+
+        if(state.bOngoing) {
+            if((state.value.size() != msg->m_data.size())) {
+                spdlog::critical("Aggregate Switch({}): Received a {} message with invalid length from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+                spdlog::debug("Aggregate Switch({}): Expected length was {}, got {}", m_ID, state.value.size(), msg->m_data.size());
+
+                throw std::runtime_error("Aggregate Switch: Received an all-gather message with invalid length!");
+            }
+
+            if(state.value != msg->m_data) {
+                spdlog::critical("Aggregate Switch({}): Received a {} message with different data from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+
+                throw std::runtime_error("Aggregate Switch: Received an all-gather message with different data!");
+            }
+
+            state.receiveFlags.at(sourcePortIdx) = true;
+
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+                spdlog::trace("Aggregate Switch({}): All-gather message received from all up-ports! Re-directing..", m_ID);
+
+                for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                    auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+                    txMsg->m_data = state.value;
+
+                    getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
+                    state.receiveFlags.at(downPortIdx) = false;
+                }
+
+                state.bOngoing = false;
+                state.value.clear();
+                std::transform(state.receiveFlags.begin(),
+                                state.receiveFlags.end(),
+                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                                [](auto& entry) { entry.second = false; return entry; });
+            }
+        }
+        else {
+            if(state.receiveFlags.size() != getUpPortAmount()) {
+                spdlog::critical("Aggregate Switch({}): Amount of down-port all-gather requests is not equal to up-port amount!", m_ID);
+                spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getUpPortAmount(), state.receiveFlags.size());
+
+                throw std::runtime_error("Aggregate Switch: Invalid mapping!");
+            }
+
+            state.bOngoing = true;
+            state.value = std::move(msg->m_data);
+            state.receiveFlags.at(sourcePortIdx) = true;
+        }
+    }
 }
 
 Network::Port &Aggregate::getAvailableUpPort()
