@@ -37,7 +37,10 @@ jobs:
         submodules: 'true'
 
     - name: Clone and install spdlog repository
-      run: sudo apt install libspdlog1
+      run: |
+          sudo apt update
+          sudo apt-get update
+          sudo apt-get -y libspdlog1
 
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
