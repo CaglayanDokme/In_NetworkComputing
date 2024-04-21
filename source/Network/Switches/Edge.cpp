@@ -926,7 +926,64 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
 
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg)
 {
-    // TODO Implement
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
+    spdlog::trace("Edge Switch({}): {} message received from port #{}", m_ID, msg->typeToString(), sourcePortIdx);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Edge Switch({}): Received an empty {} message from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+
+        throw std::runtime_error("Edge Switch: Received an empty all-gather message!");
+    }
+
+    if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
+        spdlog::critical("Edge Switch({}): {} message received from an up-port!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Edge Switch: All-gather message received from an up-port!");
+    }
+
+    const auto sourceCompNodeIdx = firstCompNodeIdx + (sourcePortIdx - getUpPortAmount());
+    auto &state = m_allGatherStates.toUp;
+
+    if(state.bOngoing) {
+        if(std::any_of(state.value.cbegin(), state.value.cend(), [sourceCompNodeIdx](const auto &entry) { return entry.first == sourceCompNodeIdx; })) {
+            spdlog::critical("Edge Switch({}): This computing node({}) has already sent an all-gather message!", m_ID, sourceCompNodeIdx);
+
+            throw std::runtime_error("Edge Switch: This port has already sent an all-gather message!");
+        }
+
+        state.value.push_back(std::make_pair(sourceCompNodeIdx, std::move(msg->m_data)));
+
+        if(state.value.size() == getDownPortAmount()) {
+            spdlog::debug("Edge Switch({}): All computing nodes have sent their all-gather messages..", m_ID);
+
+            for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+
+                txMsg->m_data.reserve(getDownPortAmount());
+                txMsg->m_data = state.value;
+
+                getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
+            }
+
+            // Reset state
+            state.bOngoing = false;
+            state.value.clear();
+        }
+    }
+    else {
+        spdlog::debug("Edge Switch({}): Initiating all-gather operation to-up..", m_ID);
+
+        state.bOngoing = true;
+
+        state.value.clear();
+        state.value.reserve(getDownPortAmount()); // There will be down-port amount of messages to be re-directed
+        state.value.push_back(std::make_pair(sourceCompNodeIdx, std::move(msg->m_data)));
+    }
 }
 
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
