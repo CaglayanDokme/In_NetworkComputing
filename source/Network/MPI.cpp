@@ -9,6 +9,7 @@
 
 #include "spdlog/spdlog.h"
 #include "Derivations.hpp"
+#include <map>
 
 using namespace Network;
 
@@ -39,7 +40,7 @@ void MPI::tick()
     switch(m_state) {
         case State::Acknowledge: {
             if(anyMsg->type() != Messages::e_Type::Acknowledge) {
-                spdlog::critical("MPI({}): Received a message of type {} while in acknowledge state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", anyMsg->typeToString(), toString(m_state), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -61,7 +62,7 @@ void MPI::tick()
         }
         case State::Receive: {
             if(anyMsg->type() != Messages::e_Type::DirectMessage) {
-                spdlog::critical("MPI({}): Received a message of type {} while in receive state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -94,7 +95,7 @@ void MPI::tick()
         }
         case State::BroadcastReceive: {
             if(anyMsg->type() != Messages::e_Type::BroadcastMessage) {
-                spdlog::critical("MPI({}): Received a message of type {} while in broadcast receive state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -116,7 +117,7 @@ void MPI::tick()
         }
         case State::Barrier: {
             if(anyMsg->type() != Messages::e_Type::BarrierRelease) {
-                spdlog::critical("MPI({}): Received a message of type {} while in barrier state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -128,7 +129,7 @@ void MPI::tick()
         }
         case State::Reduce: {
             if(anyMsg->type() != Messages::e_Type::Reduce) {
-                spdlog::critical("MPI({}): Received a message of type {} while in reduce state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -149,7 +150,7 @@ void MPI::tick()
         }
         case State::ReduceAll: {
             if(anyMsg->type() != Messages::e_Type::ReduceAll) {
-                spdlog::critical("MPI({}): Received a message of type {} while in reduce-all state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -170,7 +171,7 @@ void MPI::tick()
         }
         case State::Scatter: {
             if(anyMsg->type() != Messages::e_Type::Scatter) {
-                spdlog::critical("MPI({}): Received a message of type {} while in scatter state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -191,7 +192,7 @@ void MPI::tick()
         }
         case State::Gather: {
             if(anyMsg->type() != Messages::e_Type::Gather) {
-                spdlog::critical("MPI({}): Received a message of type {} while in gather state!", m_ID, anyMsg->typeToString());
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -210,8 +211,29 @@ void MPI::tick()
 
             break;
         }
+        case State::AllGather: {
+            if(anyMsg->type() != Messages::e_Type::AllGather) {
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+
+                throw std::logic_error("MPI cannot receive a message of this type!");
+            }
+
+            const auto &msg = *static_cast<const Messages::AllGather *>(anyMsg.release());
+
+            {
+                std::lock_guard lock(m_allGather.mutex);
+
+                m_allGather.receivedData = std::move(msg.m_data);
+            }
+
+            setState(State::Idle);
+            m_allGather.notifier.notify_one();
+
+            break;
+        }
         default: {
-            spdlog::critical("MPI({}): Invalid state({})!", m_ID, static_cast<int>(m_state));
+            spdlog::critical("MPI({}): Invalid state({})!", m_ID, toString(m_state));
+
             throw std::logic_error("Invalid MPI state!");
         }
     }
@@ -582,6 +604,46 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
     }
 }
 
+void MPI::allGather(std::vector<float> &data)
+{
+    spdlog::trace("MPI({}): All-gathering data", m_ID);
+
+    if(data.empty()) {
+        spdlog::critical("MPI({}): Empty data given to all-gather!", m_ID);
+
+        throw std::invalid_argument("MPI: Empty data given to all-gather!");
+    }
+
+    setState(State::AllGather);
+
+    const auto expectedSize = data.size() * Network::Utilities::deriveComputingNodeAmount();
+
+    // Send first
+    {
+        auto msg = std::make_unique<Messages::AllGather>();
+
+        msg->m_data = std::move(data);
+
+        m_port.pushOutgoing(std::move(msg));
+    }
+
+    {
+        std::unique_lock lock(m_allGather.mutex);
+        m_allGather.notifier.wait(lock);
+
+        if(m_allGather.receivedData.size() != expectedSize) {
+            spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, m_allGather.receivedData.size(), expectedSize);
+
+            throw std::runtime_error("MPI: Received data size doesn't match the expected size!");
+        }
+
+        data = std::move(m_allGather.receivedData);
+        m_allGather.receivedData.clear();
+    }
+
+    setState(State::Idle);
+}
+
 void MPI::setState(const State state)
 {
     if(State::Idle == state) {
@@ -591,10 +653,28 @@ void MPI::setState(const State state)
     }
 
     if(State::Idle != m_state) {
-        spdlog::critical("MPI({}): Invalid state transition from {} to {}!", m_ID, static_cast<int>(m_state), static_cast<int>(state));
+        spdlog::critical("MPI({}): Invalid state transition from {} to {}!", m_ID, toString(m_state), toString(state));
 
         throw std::logic_error("Invalid MPI state transition!");
     }
 
     m_state = state;
+}
+
+const std::string &MPI::toString(const State state) const
+{
+    static const std::map<const State, const std::string> stateMap = {
+        {State::Idle, "Idle"},
+        {State::Acknowledge, "Acknowledge"},
+        {State::Receive, "Receive"},
+        {State::BroadcastReceive, "BroadcastReceive"},
+        {State::Barrier, "Barrier"},
+        {State::Reduce, "Reduce"},
+        {State::ReduceAll, "ReduceAll"},
+        {State::Scatter, "Scatter"},
+        {State::Gather, "Gather"},
+        {State::AllGather, "AllGather"}
+    };
+
+    return stateMap.at(state);
 }

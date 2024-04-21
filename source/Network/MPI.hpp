@@ -29,7 +29,8 @@ namespace Network {
             Reduce,
             ReduceAll,
             Scatter,
-            Gather
+            Gather,
+            AllGather
         };
 
     public: /** Construction **/
@@ -123,8 +124,17 @@ namespace Network {
          */
         void gather(std::vector<float> &data, const size_t destinationID);
 
+        /**
+         * @brief Gather the data of all computing nodes at all nodes.
+         * @param data The data(array) to be gathered
+         *
+         * @note The destination data(array) must not be empty
+         */
+        void allGather(std::vector<float> &data);
+
     private:
         void setState(const State state);
+        const std::string &toString(const State state) const;
 
     private: /** Members **/
         const std::size_t m_ID;
@@ -192,5 +202,12 @@ namespace Network {
             std::mutex mutex;
             std::condition_variable notifier;
         } m_gather;
+
+        // All gather
+        struct {
+            decltype(Messages::AllGather::m_data) receivedData;
+            std::mutex mutex;
+            std::condition_variable notifier;
+        } m_allGather;
     };
 };
