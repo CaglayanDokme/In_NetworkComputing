@@ -148,6 +148,10 @@ bool Aggregate::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::IS_AllGather: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
+                break;
+            }
             default: {
                 spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
                 spdlog::debug("Type name was {}", anyMsg->typeToString());
@@ -715,6 +719,11 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
         search->second.pushOutgoing(std::move(msg));
     }
+}
+
+void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+{
+    // TODO Implement
 }
 
 Network::Port &Aggregate::getAvailableUpPort()

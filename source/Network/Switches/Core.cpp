@@ -352,3 +352,8 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
 
     m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
+
+void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+{
+    // TODO Implement
+}

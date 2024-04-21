@@ -37,6 +37,7 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
+        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
 
     private: /** Members **/
         std::map<std::size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False

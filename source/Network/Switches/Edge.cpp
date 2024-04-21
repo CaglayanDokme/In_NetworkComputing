@@ -195,12 +195,20 @@ bool Edge::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather*>(anyMsg.release()))));
                 break;
             }
+            case Messages::e_Type::AllGather: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::AllGather>(static_cast<Messages::AllGather*>(anyMsg.release()))));
+                break;
+            }
             case Messages::e_Type::IS_Scatter: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Gather: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                break;
+            }
+            case Messages::e_Type::IS_AllGather: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
                 break;
             }
             default: {
@@ -916,6 +924,11 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
     }
 }
 
+void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg)
+{
+    // TODO Implement
+}
+
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     if(!msg) {
@@ -1023,6 +1036,11 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         // Reset state
         state.reset();
     }
+}
+
+void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+{
+    // TODO Implement
 }
 
 Network::Port &Edge::getAvailableUpPort()
