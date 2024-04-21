@@ -16,10 +16,12 @@ namespace Network::Messages {
         ReduceAll,
         Scatter,
         Gather,
+        AllGather,
 
         // Inter-switch messages
         IS_Scatter,
         IS_Gather,
+        IS_AllGather,
     };
 
     enum class ReduceOperation {
@@ -143,6 +145,14 @@ namespace Network::Messages {
 
     public: /** Addressing **/
         const std::size_t m_destinationID;
+
+    public: /** Data **/
+        std::vector<float> m_data;
+    };
+
+    class AllGather : public BaseMessage {
+    public: /** Construction **/
+        AllGather() = default;
 
     public: /** Data **/
         std::vector<float> m_data;

@@ -82,9 +82,11 @@ const std::string &Network::Messages::toString(const e_Type eType)
         {e_Type::ReduceAll,        "ReduceAll"},
         {e_Type::Scatter,          "Scatter"},
         {e_Type::Gather,           "Gather"},
+        {e_Type::AllGather,        "AllGather"},
 
         {e_Type::IS_Scatter,       "Inter-Switch Scatter"},
         {e_Type::IS_Gather,        "Inter-Switch Gather"},
+        {e_Type::IS_AllGather,     "Inter-Switch AllGather"},
     };
 
     return strMap.at(eType);

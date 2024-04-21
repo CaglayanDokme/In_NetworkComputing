@@ -37,4 +37,17 @@ namespace Network::Messages::InterSwitch {
             >
         > m_data;
     };
+
+    class AllGather : public BaseMessage {
+    public: /** Construction **/
+        AllGather() = default;
+
+    public: /** Data **/
+        std::vector<
+            std::pair<
+                std::size_t,                           // Source computing node ID
+                decltype(Messages::AllGather::m_data)  // Data to be gathered
+            >
+        > m_data;
+    };
 };
