@@ -70,6 +70,12 @@ Gather::Gather(const std::size_t destinationID)
     // Nothing
 }
 
+AllGather::AllGather()
+: BaseMessage(e_Type::AllGather)
+{
+    // Nothing
+}
+
 const std::string &Network::Messages::toString(const e_Type eType)
 {
     static const std::map<e_Type, std::string> strMap {

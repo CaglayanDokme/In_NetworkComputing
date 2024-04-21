@@ -13,3 +13,9 @@ Gather::Gather(const std::size_t destinationID)
 {
     // Nothing
 }
+
+AllGather::AllGather()
+: BaseMessage(e_Type::IS_AllGather)
+{
+    // Nothing
+}

@@ -152,7 +152,7 @@ namespace Network::Messages {
 
     class AllGather : public BaseMessage {
     public: /** Construction **/
-        AllGather() = default;
+        AllGather();
 
     public: /** Data **/
         std::vector<float> m_data;
