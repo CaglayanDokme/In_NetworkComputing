@@ -1137,7 +1137,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         spdlog::trace("Edge({}): All-gather message received from port #{}", m_ID, sourcePortIdx);
 
         if(state.receiveFlags.at(sourcePortIdx)) {
-            spdlog::critical("Edge({}): This port({}) has already sent an all-gather message!", m_ID, sourcePortIdx);
+            spdlog::critical("Edge({}): This port({}) has already sent an {} message!", m_ID, sourcePortIdx, msg->typeToString());
 
             throw std::runtime_error("Edge: This port has already sent an all-gather message!");
         }
@@ -1148,27 +1148,40 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
             throw std::runtime_error("Edge: All-gather message data is different from the expected!");
         }
 
+        state.receiveFlags.at(sourcePortIdx) = true;
+
         if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
-            spdlog::debug("Edge({}): All computing nodes have sent their all-gather messages..", m_ID);
+            spdlog::debug("Edge({}): All ports have sent their {} messages..", m_ID, msg->typeToString());
+
+            const size_t refDataSize = state.value.at(0).second.size();
+            decltype(Messages::Gather::m_data) mergedData;
+            for(size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(); ++compNodeIdx) {
+                const auto dataPair = std::find_if(state.value.cbegin(), state.value.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
+
+                if(state.value.cend() == dataPair) {
+                    spdlog::critical("Edge({}): Computing node #{} didn't send its all-gather message!", m_ID, compNodeIdx);
+                    spdlog::debug("Edge({}): Gathered data size was {}", m_ID, state.value.size());
+
+                    throw std::runtime_error("Edge: Computing node didn't send its all-gather message!");
+                }
+
+                const auto &compNodeData = dataPair->second;
+
+                if(compNodeData.size() != refDataSize) {
+                    spdlog::critical("Edge({}): All-gather message chunk data size is different from the expected!", m_ID);
+                    spdlog::debug("Edge({}): Expected size {}, detected size for computing node #{} is {}", m_ID, refDataSize, compNodeIdx, compNodeData.size());
+
+                    throw std::runtime_error("Edge: All-gather message data size is different from the expected!");
+                }
+
+                mergedData.insert(mergedData.end(), compNodeData.cbegin(), compNodeData.cend());
+            }
 
             for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                 spdlog::trace("Edge({}): Preparing all-gather message for down-port #{}..", m_ID, downPortIdx);
 
                 auto txMsg = std::make_unique<Messages::AllGather>();
-
-                txMsg->m_data.reserve(state.value.size() * state.value.at(0).second.size());
-
-                const size_t refDataSize = state.value.at(0).second.size();
-                for(auto &compNodeData : state.value) {
-                    if(compNodeData.second.size() != refDataSize) {
-                        spdlog::critical("Edge({}): All-gather message chunk data size is different from the expected!", m_ID);
-                        spdlog::debug("Edge({}): Expected size {}, detected size for computing node #{} is {}", m_ID, refDataSize, compNodeData.first, compNodeData.second.size());
-
-                        throw std::runtime_error("Edge: All-gather message data size is different from the expected!");
-                    }
-
-                    txMsg->m_data.insert(txMsg->m_data.end(), compNodeData.second.cbegin(), compNodeData.second.cend());
-                }
+                txMsg->m_data = mergedData;
 
                 getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
             }
@@ -1180,9 +1193,6 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
                             std::inserter(state.receiveFlags, state.receiveFlags.begin()),
                             [](auto &entry) { entry.second = false; return entry; });
             state.value.clear();
-        }
-        else {
-            state.receiveFlags.at(sourcePortIdx) = true;
         }
     }
     else {
