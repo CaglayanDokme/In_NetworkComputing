@@ -56,6 +56,12 @@ namespace Network::Switches {
             decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
         } m_reduceAllStates;
 
+        struct {
+            bool bOngoing{false};                        // True if an all-gather operation is ongoing
+            std::map<std::size_t, bool> flags;           // Key: Port index, Value: True/False
+            decltype(Messages::InterSwitch::AllGather::m_data) value; // Current all-gather value
+        } m_allGatherStates;
+
         inline static std::size_t nextID = 0; // i.e. Number of core switches in total
         inline static std::size_t compNodePerPort = 0;
     };

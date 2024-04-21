@@ -9,6 +9,10 @@ Core::Core(const std::size_t portAmount)
 {
     spdlog::trace("Created core switch with ID #{}", m_ID);
 
+    if(compNodePerPort == 0) {
+        compNodePerPort = std::size_t(std::pow(m_portAmount / 2, 2));
+    }
+
     // Initialize barrier requests
     for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx) {
         m_barrierRequestFlags.insert({compNodeIdx, false});
@@ -24,8 +28,9 @@ Core::Core(const std::size_t portAmount)
         m_reduceAllStates.flags.insert({sourcePortIdx, false});
     }
 
-    if(compNodePerPort == 0) {
-        compNodePerPort = std::size_t(std::pow(m_portAmount / 2, 2));
+    // Initialize all-gather requests
+    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
+        m_allGatherStates.flags.insert({sourcePortIdx, false});
     }
 }
 
@@ -355,5 +360,54 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
-    // TODO Implement
+    if(!msg) {
+        spdlog::critical("Core Switch({}): Received empty inter-switch all-gather message from port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Received empty inter-switch all-gather message!");
+    }
+
+    spdlog::trace("Core Switch({}): {} message received from port #{}", m_ID, msg->typeToString(), sourcePortIdx);
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Core Switch({}): Received empty {} message from port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Received empty inter-switch all-gather message!");
+    }
+
+    if(m_allGatherStates.bOngoing) {
+        if(m_allGatherStates.flags.at(sourcePortIdx)) {
+            spdlog::critical("Core Switch({}): Received multiple {} messages from port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Received multiple inter-switch all-gather messages!");
+        }
+
+        m_allGatherStates.flags.at(sourcePortIdx) = true;
+        m_allGatherStates.value.insert(m_allGatherStates.value.end(), msg->m_data.begin(), msg->m_data.end());
+
+        if(std::all_of(m_allGatherStates.flags.cbegin(), m_allGatherStates.flags.cend(), [](const auto& entry) { return entry.second; })) {
+            spdlog::debug("Core Switch({}): All-gather operation completed, sending the result..", m_ID);
+
+            // Send all-gather result message to all down-ports
+            for(auto &port: m_ports) {
+                auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+                txMsg->m_data = m_allGatherStates.value;
+
+                port.pushOutgoing(std::move(txMsg));
+            }
+
+            // Reset all requests
+            for(auto &elem: m_allGatherStates.flags) {
+                elem.second = false;
+            }
+
+            m_allGatherStates.bOngoing = false;
+            m_allGatherStates.value.clear();
+        }
+    }
+    else {
+        m_allGatherStates.bOngoing = true;
+        m_allGatherStates.value.reserve(msg->m_data.size() * m_portAmount);
+        m_allGatherStates.value = std::move(msg->m_data);
+        m_allGatherStates.flags.at(sourcePortIdx) = true;
+    }
 }
