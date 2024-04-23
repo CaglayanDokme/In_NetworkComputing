@@ -40,7 +40,7 @@ void MPI::tick()
     switch(m_state) {
         case State::Acknowledge: {
             if(anyMsg->type() != Messages::e_Type::Acknowledge) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", anyMsg->typeToString(), toString(m_state), toString(m_state));
+                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
 
                 throw std::logic_error("MPI cannot receive a message of this type!");
             }
@@ -291,7 +291,6 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
 
     setState(State::Receive);
-
 
     if(!data.empty()) {
         spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
