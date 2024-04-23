@@ -19,7 +19,7 @@ int main(const int argc, const char *const argv[])
              "Ports per switch(4, 6, ..., 2n)",
              cxxopts::value<std::size_t>()->default_value(std::to_string(4)))
 
-            ("log_level",
+            ("log-filter",
              "Level of log filter"
              "\n0: Trace"
              "\n1: Debug"
@@ -54,7 +54,7 @@ int main(const int argc, const char *const argv[])
     }
 
     const std::size_t portPerSwitch = arguments["ports"].as<std::size_t>();
-    spdlog::set_level(spdlog::level::level_enum(arguments["log_level"].as<int>()));
+    spdlog::set_level(spdlog::level::level_enum(arguments["log-filter"].as<int>()));
     spdlog::info("Starting program..");
 
     if(4 > portPerSwitch) {
