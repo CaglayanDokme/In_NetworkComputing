@@ -292,10 +292,10 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
     // Wait for the message
     do {
+        std::unique_lock lock(m_directReceive.mutex);
+
         // Visit the reception queue
         {
-            std::lock_guard lock(m_directReceive.mutex);
-
             auto msgIterator = std::find_if(m_directReceive.messages.begin(), m_directReceive.messages.end(), [sourceID](auto &&msg) {
                 return (msg->m_sourceID == sourceID);
             });
@@ -313,11 +313,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
             }
         }
 
-        // TODO You might want to lock here as well. Consider being notified before the unique lock
-
         // Wait for the message
         while(true) {
-            std::unique_lock lock(m_directReceive.mutex);
             m_directReceive.notifier.wait(lock);
 
             auto &msg = *m_directReceive.messages.back();
@@ -367,13 +364,13 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
         // Wait for acknowledgements
         {
+            std::unique_lock lock(m_acknowledge.mutex);
+
             const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
             std::vector<bool> acks(compNodeAmount, false);
             acks.at(m_ID) = true; // Skip the broadcaster
 
             {
-                std::lock_guard lock(m_acknowledge.mutex);
-
                 std::remove_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [&](auto &&msg) {
                     if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
                         return false;
@@ -393,7 +390,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             }
 
             while(!std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
-                std::unique_lock lock(m_acknowledge.mutex);
+                spdlog::trace("MPI({}): Waiting for broadcast acknowledgements..", m_ID);
                 m_acknowledge.notifier.wait(lock);
 
                 const auto &msg = *m_acknowledge.messages.back();
@@ -426,13 +423,31 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         }
 
         spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
+        std::unique_lock lock(m_broadcastReceive.mutex);
+
+        // Check the already queued messages
+        {
+            auto msgIterator = std::find_if(m_broadcastReceive.messages.begin(), m_broadcastReceive.messages.end(), [sourceID](auto &&msg) {
+                return (msg->m_sourceID == sourceID);
+            });
+
+            if(msgIterator != m_broadcastReceive.messages.cend()) {
+                auto &msg = *msgIterator->get();
+
+                spdlog::trace("MPI({}): Received {} from message..", m_ID, msg.typeToString());
+
+                data = std::move(msg.m_data);
+                m_broadcastReceive.messages.erase(msgIterator);
+
+                return;
+            }
+        }
 
         // Wait for broadcast message
         while(true) {
-            std::unique_lock lock(m_broadcastReceive.mutex);
             m_broadcastReceive.notifier.wait(lock);
 
-            auto& msg = *m_broadcastReceive.messages.back();
+            auto &msg = *m_broadcastReceive.messages.back();
 
             if(msg.m_sourceID != sourceID) {
                 spdlog::warn("MPI({}): Received {} message from another source({}), expected note #{}", m_ID, msg.typeToString(), msg.m_sourceID, sourceID);
@@ -451,7 +466,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
             m_port.pushOutgoing(std::move(msg));
 
-            spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
+            spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
 }
@@ -460,16 +475,16 @@ void MPI::barrier()
 {
     spdlog::trace("MPI({}): Barrier", m_ID);
 
-    // Create a message
-    auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
+    std::unique_lock lock(m_barrier.mutex);
 
-    // Push the message to the port
-    m_port.pushOutgoing(std::move(msg));
+    // Send barrier request message
+    {
+        auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
 
-    // TODO You might want to lock here as well. Consider being notified before the unique lock
+        m_port.pushOutgoing(std::move(msg));
+    }
 
     // Wait for the barrier to be released
-    std::unique_lock lock(m_barrier.mutex);
     m_barrier.notifier.wait(lock);
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
@@ -486,10 +501,10 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
     }
 
     if(m_ID == destinationID) {
+        std::unique_lock lock(m_reduce.mutex);
+
         // Check the already queued messages
         {
-            std::lock_guard lock(m_reduce.mutex);
-
             auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
                 if(msg->m_opType != operation) {
                     return false;
@@ -525,10 +540,9 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
 
         // Wait for the message
         while(true) {
-            std::unique_lock lock(m_reduce.mutex);
             m_reduce.notifier.wait(lock);
 
-            auto& msg = *m_reduce.messages.back();
+            auto &msg = *m_reduce.messages.back();
 
             if(msg.m_opType != operation) {
                 spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
@@ -572,7 +586,8 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 
     const auto dataSize = data.size();
 
-    // TODO Why don't you lock with unique lock here and avoid checking the already queued messages?
+    // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
+    std::unique_lock lock(m_reduceAll.mutex);
 
     {
         auto msg = std::make_unique<Messages::ReduceAll>(operation);
@@ -582,63 +597,29 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
     }
 
     // Wait for the message
-    {
-        // Check the already queued messages
-        {
-            std::lock_guard lock(m_reduceAll.mutex);
+    while(true) {
+        m_reduceAll.notifier.wait(lock);
 
-            auto msgIterator = std::find_if(m_reduceAll.messages.begin(), m_reduceAll.messages.end(), [&](auto &&msg) {
-                if(msg->m_opType == operation) {
-                    return false;
-                }
+        auto &msg = *m_reduceAll.messages.back();
 
-                if(msg->m_data.size() != dataSize) {
-                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), dataSize);
+        if(msg.m_opType != operation) {
+            spdlog::warn("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
 
-                    return false;
-                }
-
-                return true;
-            });
-
-            if(msgIterator != m_reduceAll.messages.cend()) {
-                spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-                auto &msg = *msgIterator->get();
-
-                data = std::move(msg.m_data);
-                m_reduceAll.messages.erase(msgIterator);
-
-                return;
-            }
+            continue;
         }
 
-        // Wait for the message
-        while(true) {
-            std::unique_lock lock(m_reduceAll.mutex);
-            m_reduceAll.notifier.wait(lock);
+        if(msg.m_data.size() != dataSize) {
+            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), dataSize);
 
-            auto &msg = *m_reduceAll.messages.back();
-
-            if(msg.m_opType != operation) {
-                spdlog::warn("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
-
-                continue;
-            }
-
-            if(msg.m_data.size() != dataSize) {
-                spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), dataSize);
-
-                continue;
-            }
-
-            spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-            data = std::move(msg.m_data);
-            m_reduceAll.messages.pop_back();
-
-            break;
+            continue;
         }
+
+        spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+        data = std::move(msg.m_data);
+        m_reduceAll.messages.pop_back();
+
+        break;
     }
 }
 
@@ -681,10 +662,10 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
             throw std::invalid_argument("Receive destination must be empty!");
         }
 
+        std::unique_lock lock(m_scatter.mutex);
+
         // Check the already queued messages
         {
-            std::lock_guard lock(m_scatter.mutex);
-
             auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
                 return (msg->m_sourceID == sourceID);
             });
@@ -703,10 +684,9 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         // Wait for the message
         while(true) {
-            std::unique_lock lock(m_scatter.mutex);
             m_scatter.notifier.wait(lock);
 
-            auto& msg = *m_scatter.messages.back();
+            auto &msg = *m_scatter.messages.back();
 
             if(msg.m_sourceID != sourceID) {
                 spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID, sourceID);
@@ -735,10 +715,10 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
     }
 
     if(m_ID == destinationID) {
+        std::unique_lock lock(m_gather.mutex);
+
         // Check the already queued messages
         do {
-            std::lock_guard lock(m_gather.mutex);
-
             auto msgIterator = std::find_if(m_gather.messages.begin(), m_gather.messages.end(), [destinationID](auto &&msg) {
                 return (msg->m_destinationID == destinationID);
             });
@@ -773,10 +753,9 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
 
         // Wait for the message
         while(true) {
-            std::unique_lock lock(m_gather.mutex);
             m_gather.notifier.wait(lock);
 
-            auto& msg = *m_gather.messages.back();
+            auto &msg = *m_gather.messages.back();
 
             if(msg.m_destinationID != destinationID) {
                 spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID, destinationID);
@@ -826,6 +805,9 @@ void MPI::allGather(std::vector<float> &data)
 
     const auto expectedSize = data.size() * Network::Utilities::deriveComputingNodeAmount();
 
+    // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
+    std::unique_lock lock(m_allGather.mutex);
+
     // Send first
     {
         auto msg = std::make_unique<Messages::AllGather>();
@@ -836,46 +818,22 @@ void MPI::allGather(std::vector<float> &data)
     }
 
     // Wait for the message
-    {
-        // Check the already queued messages
-        {
-            std::lock_guard lock(m_allGather.mutex);
+    while(true) {
+        m_allGather.notifier.wait(lock);
 
-            auto msgIterator = std::find_if(m_allGather.messages.begin(), m_allGather.messages.end(), [&](auto &&msg) {
-                return (msg->m_data.size() == expectedSize);
-            });
+        auto &msg = *m_allGather.messages.back();
 
-            if(msgIterator != m_allGather.messages.cend()) {
-                spdlog::trace("MPI({}): All-gathering data with received message..", m_ID);
+        if(msg.m_data.size() != expectedSize) {
+            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), expectedSize);
 
-                auto &msg = *msgIterator->get();
-
-                data = std::move(msg.m_data);
-                m_allGather.messages.erase(msgIterator);
-
-                return;
-            }
+            continue;
         }
 
-        // Wait for the message
-        while(true) {
-            std::unique_lock lock(m_allGather.mutex);
-            m_allGather.notifier.wait(lock);
+        spdlog::trace("MPI({}): All-gathering data with received message..", m_ID);
 
-            auto &msg = *m_allGather.messages.back();
+        data = std::move(msg.m_data);
+        m_allGather.messages.pop_back();
 
-            if(msg.m_data.size() != expectedSize) {
-                spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), expectedSize);
-
-                continue;
-            }
-
-            spdlog::trace("MPI({}): All-gathering data with received message..", m_ID);
-
-            data = std::move(msg.m_data);
-            m_allGather.messages.pop_back();
-
-            break;
-        }
+        break;
     }
 }
