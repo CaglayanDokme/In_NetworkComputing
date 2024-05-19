@@ -27,214 +27,168 @@ void MPI::tick()
     if(!m_port.hasIncoming()) {
         return;
     }
-    else if(State::Idle == m_state) {
-        return;
-    }
-    else {
-        // Nothing to do
-    }
 
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
-    switch(m_state) {
-        case State::Acknowledge: {
-            if(anyMsg->type() != Messages::e_Type::Acknowledge) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+    switch(anyMsg->type()) {
+        case Messages::e_Type::Acknowledge: {
+            auto pMsg = std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_destinationID != m_ID) {
+                spdlog::critical("MPI({}): Received acknowledgement for another destination({})!", m_ID, pMsg->m_destinationID);
+
+                throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            const auto &msg = *static_cast<const Messages::Acknowledge *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} acknowledgement from node #{}", m_ID, Messages::toString(pMsg->m_ackType), pMsg->m_sourceID);
 
             {
                 std::lock_guard lock(m_acknowledge.mutex);
-                spdlog::trace("MPI({}): Saving acknowledgement from {}", m_ID, msg.m_sourceID);
-
-                m_acknowledge.sourceID = msg.m_sourceID;
-                m_acknowledge.ackType = msg.m_ackType;
+                m_acknowledge.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_acknowledge.notifier.notify_one();
+            m_acknowledge.notifier.notify_all();
 
             break;
         }
-        case State::Receive: {
-            if(anyMsg->type() != Messages::e_Type::DirectMessage) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::DirectMessage: {
+            auto pMsg = std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_destinationID != m_ID) {
+                spdlog::critical("MPI({}): Received direct message for another destination({})!", m_ID, pMsg->m_destinationID);
+
+                throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            const auto &msg = *static_cast<const Messages::DirectMessage *>(anyMsg.release());
-
-            if(msg.m_destinationID != m_ID) {
-                spdlog::critical("MPI({}): Received a message for another node({}) while in receive state!", m_ID, msg.m_destinationID);
-
-                throw std::logic_error("MPI cannot receive a message for another node!");
-            }
-
-            if(msg.m_data.empty()) {
-                spdlog::critical("MPI({}): Empty data received from node #{}!", m_ID, msg.m_sourceID);
-
-                throw std::runtime_error("MPI mustn't received empty message!");
-            }
+            spdlog::trace("MPI({}): Enqueueing direct message from node #{}", m_ID, pMsg->m_sourceID);
 
             {
                 std::lock_guard lock(m_directReceive.mutex);
-
-                m_directReceive.receivedData = std::move(msg.m_data);
-                m_directReceive.sourceID = msg.m_sourceID;
+                m_directReceive.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_directReceive.notifier.notify_one();
+            m_directReceive.notifier.notify_all();
 
             break;
         }
-        case State::BroadcastReceive: {
-            if(anyMsg->type() != Messages::e_Type::BroadcastMessage) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::BroadcastMessage: {
+            auto pMsg = std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_sourceID == m_ID) {
+                spdlog::critical("MPI({}): Received broadcast message from itself!", m_ID);
+
+                throw std::logic_error("MPI: Cannot receive broadcast message from itself!");
             }
 
-            const auto &msg = *static_cast<const Messages::BroadcastMessage *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID);
 
             {
                 std::lock_guard lock(m_broadcastReceive.mutex);
-
-                m_broadcastReceive.receivedData = std::move(msg.m_data);
-                m_broadcastReceive.sourceID = msg.m_sourceID;
+                m_broadcastReceive.messages.push_back(std::move(pMsg));
             }
 
-
-            setState(State::Idle);
-            m_broadcastReceive.notifier.notify_one();
+            m_broadcastReceive.notifier.notify_all();
 
             break;
         }
-        case State::Barrier: {
-            if(anyMsg->type() != Messages::e_Type::BarrierRelease) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
-
-                throw std::logic_error("MPI cannot receive a message of this type!");
-            }
-
-            setState(State::Idle);
-            m_barrier.notifier.notify_one();
+        case Messages::e_Type::BarrierRelease: {
+            m_barrier.notifier.notify_all();
 
             break;
         }
-        case State::Reduce: {
-            if(anyMsg->type() != Messages::e_Type::Reduce) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::Reduce: {
+            auto pMsg = std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_destinationID != m_ID) {
+                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID);
+
+                throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            const auto &msg = *static_cast<const Messages::Reduce *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
             {
                 std::lock_guard lock(m_reduce.mutex);
-
-                m_reduce.receivedData = std::move(msg.m_data);
-                m_reduce.operation = msg.m_opType;
+                m_reduce.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_reduce.notifier.notify_one();
+            m_reduce.notifier.notify_all();
 
             break;
         }
-        case State::ReduceAll: {
-            if(anyMsg->type() != Messages::e_Type::ReduceAll) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::ReduceAll: {
+            auto pMsg = std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
-            }
-
-            const auto &msg = *static_cast<const Messages::ReduceAll *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
             {
                 std::lock_guard lock(m_reduceAll.mutex);
-
-                m_reduceAll.receivedData = std::move(msg.m_data);
-                m_reduceAll.operation = msg.m_opType;
+                m_reduceAll.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_reduceAll.notifier.notify_one();
+            m_reduceAll.notifier.notify_all();
 
             break;
         }
-        case State::Scatter: {
-            if(anyMsg->type() != Messages::e_Type::Scatter) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::Scatter: {
+            auto pMsg = std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_sourceID == m_ID) {
+                spdlog::critical("MPI({}): Received {} message from itself!", m_ID, pMsg->typeToString());
+
+                throw std::logic_error("MPI: Cannot receive scatter message from itself!");
             }
 
-            const auto &msg = *static_cast<const Messages::Scatter *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID);
 
             {
                 std::lock_guard lock(m_scatter.mutex);
-
-                m_scatter.receivedData = std::move(msg.m_data);
-                m_scatter.sourceID = msg.m_sourceID;
+                m_scatter.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_scatter.notifier.notify_one();
+            m_scatter.notifier.notify_all();
 
             break;
         }
-        case State::Gather: {
-            if(anyMsg->type() != Messages::e_Type::Gather) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::Gather: {
+            auto pMsg = std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
+            if(pMsg->m_destinationID != m_ID) {
+                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID);
+
+                throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            const auto &msg = *static_cast<const Messages::Gather *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
             {
                 std::lock_guard lock(m_gather.mutex);
-
-                m_gather.receivedData = std::move(msg.m_data);
-                m_gather.destinationID = msg.m_destinationID;
+                m_gather.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_gather.notifier.notify_one();
+            m_gather.notifier.notify_all();
 
             break;
         }
-        case State::AllGather: {
-            if(anyMsg->type() != Messages::e_Type::AllGather) {
-                spdlog::critical("MPI({}): Received a message of type {} while in {} state!", m_ID, anyMsg->typeToString(), toString(m_state));
+        case Messages::e_Type::AllGather: {
+            auto pMsg = std::move(std::unique_ptr<Messages::AllGather>(static_cast<Messages::AllGather *>(anyMsg.release())));
 
-                throw std::logic_error("MPI cannot receive a message of this type!");
-            }
-
-            const auto &msg = *static_cast<const Messages::AllGather *>(anyMsg.release());
+            spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
             {
                 std::lock_guard lock(m_allGather.mutex);
-
-                m_allGather.receivedData = std::move(msg.m_data);
+                m_allGather.messages.push_back(std::move(pMsg));
             }
 
-            setState(State::Idle);
-            m_allGather.notifier.notify_one();
+            m_allGather.notifier.notify_all();
 
             break;
         }
-        default: {
-            spdlog::critical("MPI({}): Invalid state({})!", m_ID, toString(m_state));
+        default:  {
+            spdlog::critical("MPI({}): Received unknown message type!", m_ID);
 
-            throw std::logic_error("Invalid MPI state!");
+            throw std::runtime_error("MPI: Unknown message type!");
         }
     }
 }
@@ -265,32 +219,63 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
         m_port.pushOutgoing(std::move(msg));
     }
 
-    // Wait for an acknowledgement
+    // Wait for the acknowledgement
     {
-        setState(State::Acknowledge);
+        // Visit the acknowledgement queue
+        {
+            std::lock_guard lock(m_acknowledge.mutex);
 
-        std::unique_lock lock(m_acknowledge.mutex);
-        m_acknowledge.notifier.wait(lock);
+            auto msgIterator = std::find_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [destinationID](auto &&msg) {
+                return ((msg->m_sourceID == destinationID) && (Messages::e_Type::DirectMessage == msg->m_ackType));
+            });
 
-        if(m_acknowledge.sourceID != destinationID) {
-            spdlog::critical("MPI({}): Received acknowledgement from invalid source({}), expected #{}", m_ID, m_acknowledge.sourceID, destinationID);
+            if(msgIterator != m_acknowledge.messages.cend()) {
+                auto &msg = *msgIterator->get();
 
-            throw std::logic_error("MPI: Invalid source ID!");
+                spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), destinationID);
+
+                m_acknowledge.messages.erase(msgIterator);
+
+                return;
+            }
         }
 
-        if(Messages::e_Type::DirectMessage != m_acknowledge.ackType) {
-            spdlog::critical("MPI({}): Received acknowledgement of invalid type({})!", m_ID, Messages::toString(m_acknowledge.ackType));
+        // Wait for the acknowledgement
+        while(true) {
+            std::unique_lock lock(m_acknowledge.mutex);
+            m_acknowledge.notifier.wait(lock);
 
-            throw std::logic_error("MPI: Invalid acknowledgement type!");
+            const auto &msg = *m_acknowledge.messages.back();
+
+            if(msg.m_sourceID != destinationID) {
+                spdlog::warn("MPI({}): Received acknowledgement from another source({}), expected note #{}", m_ID, msg.m_sourceID, destinationID);
+
+                continue;
+            }
+
+            if(msg.m_ackType != Messages::e_Type::DirectMessage) {
+                spdlog::warn("MPI({}): Received acknowledgement of another type({})!", m_ID, msg.typeToString());
+
+                continue;
+            }
+
+            spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), destinationID);
+            m_acknowledge.messages.pop_back();
+
+            if(!m_acknowledge.messages.empty()) {
+                spdlog::warn("MPI({}): More acknowledgements({}) are pending!", m_ID, m_acknowledge.messages.size());
+            }
+
+            return;
         }
     }
+
+    throw std::runtime_error("MPI: Shall never reach here!");
 }
 
 void MPI::receive(std::vector<float> &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
-
-    setState(State::Receive);
 
     if(!data.empty()) {
         spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
@@ -299,26 +284,62 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
         throw std::invalid_argument("Receive destination must be empty!");
     }
 
-    // Wait for a message
-    {
+    if(m_ID == sourceID) {
+        spdlog::critical("MPI({}): Cannot receive from itself!", m_ID);
+
+        throw std::invalid_argument("MPI cannot receive from itself!");
+    }
+
+    // Wait for the message
+    do {
         std::unique_lock lock(m_directReceive.mutex);
-        m_directReceive.notifier.wait(lock);
 
-        if(m_directReceive.sourceID != sourceID) {
-            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_directReceive.sourceID, sourceID);
+        // Visit the reception queue
+        {
+            auto msgIterator = std::find_if(m_directReceive.messages.begin(), m_directReceive.messages.end(), [sourceID](auto &&msg) {
+                return (msg->m_sourceID == sourceID);
+            });
 
-            throw std::logic_error("MPI: Invalid source ID!");
+            if(msgIterator != m_directReceive.messages.cend()) {
+                auto &msg = *msgIterator->get();
+
+                spdlog::trace("MPI({}): Received {} from node #{}", m_ID, msg.typeToString(), sourceID);
+
+                data = std::move(msg.m_data);
+
+                m_directReceive.messages.erase(msgIterator);
+
+                break;
+            }
         }
 
-        data = std::move(m_directReceive.receivedData);
-    }
+        // Wait for the message
+        while(true) {
+            m_directReceive.notifier.wait(lock);
+
+            auto &msg = *m_directReceive.messages.back();
+
+            if(msg.m_sourceID != sourceID) {
+                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID, sourceID);
+
+                continue;
+            }
+
+            spdlog::trace("MPI({}): Received {} from node #{}", m_ID, msg.typeToString(), sourceID);
+
+            data = std::move(msg.m_data);
+            m_directReceive.messages.pop_back();
+
+            break;
+        }
+    } while(false);
 
     // Send an acknowledgement
     {
         auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::DirectMessage);
         m_port.pushOutgoing(std::move(msg));
 
-        spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
+        spdlog::trace("MPI({}): Sent {} acknowledgement to {}", m_ID, Messages::toString(Messages::e_Type::DirectMessage), sourceID);
     }
 }
 
@@ -343,43 +364,57 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
         // Wait for acknowledgements
         {
+            std::unique_lock lock(m_acknowledge.mutex);
+
             const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
             std::vector<bool> acks(compNodeAmount, false);
             acks.at(m_ID) = true; // Skip the broadcaster
 
-            while(true) {
-                setState(State::Acknowledge);
+            {
+                std::remove_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [&](auto &&msg) {
+                    if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
+                        return false;
+                    }
 
-                // Wait for notification
-                std::unique_lock lock(m_acknowledge.mutex);
+                    if(acks.at(msg->m_sourceID)) {
+                        spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg->m_sourceID);
+
+                        throw std::logic_error("MPI: Duplicate acknowledgement!");
+                    }
+
+                    spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg->typeToString(), msg->m_sourceID);
+                    acks.at(msg->m_sourceID) = true;
+
+                    return true;
+                });
+            }
+
+            while(!std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
+                spdlog::trace("MPI({}): Waiting for broadcast acknowledgements..", m_ID);
                 m_acknowledge.notifier.wait(lock);
 
-                if(m_acknowledge.ackType != Messages::e_Type::BroadcastMessage) {
-                    spdlog::critical("MPI({}): Received acknowledgement of invalid type({})!", m_ID, Messages::toString(m_acknowledge.ackType));
+                const auto &msg = *m_acknowledge.messages.back();
 
-                    throw std::logic_error("MPI: Invalid acknowledgement type!");
+                if(Messages::e_Type::BroadcastMessage != msg.m_ackType) {
+                    spdlog::warn("MPI({}): While waiting for broadcast acknowledge, received acknowledgement of another type({})!", m_ID, msg.typeToString());
+
+                    continue;
                 }
 
-                if(acks[m_acknowledge.sourceID]) {
-                    spdlog::critical("MPI({}): Received duplicate acknowledgement from {}", m_ID, m_acknowledge.sourceID);
+                if(acks.at(msg.m_sourceID)) {
+                    spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg.m_sourceID);
 
                     throw std::logic_error("MPI: Duplicate acknowledgement!");
                 }
 
-                acks.at(m_acknowledge.sourceID) = true;
-                spdlog::trace("MPI({}): Received acknowledgement from {}", m_ID, m_acknowledge.sourceID);
-
-                if(std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
-                    spdlog::trace("MPI({}): All acknowledgements received", m_ID);
-
-                    break;
-                }
+                spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), msg.m_sourceID);
+                acks.at(msg.m_sourceID) = true;
             }
+
+            spdlog::trace("MPI({}): Received all acknowledgements", m_ID);
         }
     }
     else {
-        setState(State::BroadcastReceive);
-
         if(!data.empty()) {
             spdlog::critical("MPI({}): Cannot receive into a non-empty destination!", m_ID);
             spdlog::debug("MPI({}): Destination had {} elements", m_ID, data.size());
@@ -387,19 +422,43 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("Receive destination must be empty!");
         }
 
-        // Wait for broadcast message
+        spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
+        std::unique_lock lock(m_broadcastReceive.mutex);
+
+        // Check the already queued messages
         {
-            spdlog::trace("MPI({}): Receiving broadcast from {}", m_ID, sourceID);
-            std::unique_lock lock(m_broadcastReceive.mutex);
+            auto msgIterator = std::find_if(m_broadcastReceive.messages.begin(), m_broadcastReceive.messages.end(), [sourceID](auto &&msg) {
+                return (msg->m_sourceID == sourceID);
+            });
+
+            if(msgIterator != m_broadcastReceive.messages.cend()) {
+                auto &msg = *msgIterator->get();
+
+                spdlog::trace("MPI({}): Received {} from message..", m_ID, msg.typeToString());
+
+                data = std::move(msg.m_data);
+                m_broadcastReceive.messages.erase(msgIterator);
+
+                return;
+            }
+        }
+
+        // Wait for broadcast message
+        while(true) {
             m_broadcastReceive.notifier.wait(lock);
 
-            if(m_broadcastReceive.sourceID != sourceID) {
-                spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_broadcastReceive.sourceID, sourceID);
+            auto &msg = *m_broadcastReceive.messages.back();
 
-                throw std::logic_error("MPI: Invalid source ID!");
+            if(msg.m_sourceID != sourceID) {
+                spdlog::warn("MPI({}): Received {} message from another source({}), expected note #{}", m_ID, msg.typeToString(), msg.m_sourceID, sourceID);
+
+                continue;
             }
 
-            data = std::move(m_broadcastReceive.receivedData);
+            spdlog::trace("MPI({}): Received {} from node #{}", m_ID, msg.typeToString(), sourceID);
+
+            data = std::move(msg.m_data);
+            m_broadcastReceive.messages.pop_back();
         }
 
         // Send an acknowledgement
@@ -407,7 +466,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
             m_port.pushOutgoing(std::move(msg));
 
-            spdlog::trace("MPI({}): Sent acknowledgement to {}", m_ID, sourceID);
+            spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
 }
@@ -415,16 +474,17 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 void MPI::barrier()
 {
     spdlog::trace("MPI({}): Barrier", m_ID);
-    setState(State::Barrier);
 
-    // Create a message
-    auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
+    std::unique_lock lock(m_barrier.mutex);
 
-    // Push the message to the port
-    m_port.pushOutgoing(std::move(msg));
+    // Send barrier request message
+    {
+        auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
+
+        m_port.pushOutgoing(std::move(msg));
+    }
 
     // Wait for the barrier to be released
-    std::unique_lock lock(m_barrier.mutex);
     m_barrier.notifier.wait(lock);
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
@@ -441,32 +501,75 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
     }
 
     if(m_ID == destinationID) {
-        setState(State::Reduce);
-
         std::unique_lock lock(m_reduce.mutex);
-        m_reduce.notifier.wait(lock);
 
-        if(m_reduce.operation != operation) {
-            spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(m_reduce.operation), Messages::toString(operation));
+        // Check the already queued messages
+        {
+            auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
+                if(msg->m_opType != operation) {
+                    return false;
+                }
 
-            throw std::logic_error("MPI: Invalid operation!");
+                if(msg->m_data.size() != data.size()) {
+                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
+
+                    return false;
+                }
+
+                return true;
+            });
+
+            if(msgIterator != m_reduce.messages.cend()) {
+                spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+                auto &msg = *msgIterator->get();
+
+                std::transform( data.cbegin(),
+                                data.cend(),
+                                msg.m_data.cbegin(),
+                                data.begin(),
+                                [operation](const float &lhs, const float &rhs) {
+                                    return Messages::reduce(lhs, rhs, operation);
+                                });
+
+                m_reduce.messages.erase(msgIterator);
+
+                return;
+            }
         }
 
-        if(data.size() != m_reduce.receivedData.size()) {
-            spdlog::critical("MPI({}): Reduction vectors doesn't match in size! Given {}, received {}", m_ID, data.size(), m_reduce.receivedData.size());
+        // Wait for the message
+        while(true) {
+            m_reduce.notifier.wait(lock);
 
-            throw std::runtime_error("MPI: Reduction vectors doesn't match in size!");
+            auto &msg = *m_reduce.messages.back();
+
+            if(msg.m_opType != operation) {
+                spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+
+                continue;
+            }
+
+            if(msg.m_data.size() != data.size()) {
+                spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
+
+                continue;
+            }
+
+            spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+            std::transform( data.cbegin(),
+                            data.cend(),
+                            msg.m_data.cbegin(),
+                            data.begin(),
+                            [operation](const float &lhs, const float &rhs) {
+                                return Messages::reduce(lhs, rhs, operation);
+                            });
+
+            m_reduce.messages.pop_back();
+
+            break;
         }
-
-        std::transform( data.cbegin(),
-                        data.cend(),
-                        m_reduce.receivedData.cbegin(),
-                        data.begin(),
-                        [operation](const float &lhs, const float &rhs) {
-                            return Messages::reduce(lhs, rhs, operation);
-                        });
-
-        m_reduce.receivedData.clear();
     }
     else {
         auto msg = std::make_unique<Messages::Reduce>(destinationID, operation);
@@ -481,24 +584,43 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 {
     spdlog::trace("MPI({}): Reducing data", m_ID);
 
-    setState(State::ReduceAll);
+    const auto dataSize = data.size();
 
-    auto msg = std::make_unique<Messages::ReduceAll>(operation);
-    msg->m_data = std::move(data);
-
-    m_port.pushOutgoing(std::move(msg));
-
+    // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
     std::unique_lock lock(m_reduceAll.mutex);
-    m_reduceAll.notifier.wait(lock);
 
-    if(m_reduceAll.operation != operation) {
-        spdlog::critical("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, Messages::toString(m_reduceAll.operation), Messages::toString(operation));
+    {
+        auto msg = std::make_unique<Messages::ReduceAll>(operation);
+        msg->m_data = std::move(data);
 
-        throw std::logic_error("MPI: Invalid reduce-all operation!");
+        m_port.pushOutgoing(std::move(msg));
     }
 
-    data = std::move(m_reduceAll.receivedData);
-    m_reduceAll.receivedData.clear();
+    // Wait for the message
+    while(true) {
+        m_reduceAll.notifier.wait(lock);
+
+        auto &msg = *m_reduceAll.messages.back();
+
+        if(msg.m_opType != operation) {
+            spdlog::warn("MPI({}): Received data with invalid reduce-all operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+
+            continue;
+        }
+
+        if(msg.m_data.size() != dataSize) {
+            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), dataSize);
+
+            continue;
+        }
+
+        spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+        data = std::move(msg.m_data);
+        m_reduceAll.messages.pop_back();
+
+        break;
+    }
 }
 
 void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
@@ -540,18 +662,45 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
             throw std::invalid_argument("Receive destination must be empty!");
         }
 
-        setState(State::Scatter);
-
         std::unique_lock lock(m_scatter.mutex);
-        m_scatter.notifier.wait(lock);
 
-        if(m_scatter.sourceID != sourceID) {
-            spdlog::critical("MPI({}): Received data from invalid source({}), expected {}!", m_ID, m_scatter.sourceID, sourceID);
+        // Check the already queued messages
+        {
+            auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
+                return (msg->m_sourceID == sourceID);
+            });
 
-            throw std::logic_error("MPI: Invalid source ID!");
+            if(msgIterator != m_scatter.messages.cend()) {
+                spdlog::trace("MPI({}): Received data from message..", m_ID);
+
+                auto &msg = *msgIterator->get();
+
+                data = std::move(msg.m_data);
+                m_scatter.messages.erase(msgIterator);
+
+                return;
+            }
         }
 
-        data = std::move(m_scatter.receivedData);
+        // Wait for the message
+        while(true) {
+            m_scatter.notifier.wait(lock);
+
+            auto &msg = *m_scatter.messages.back();
+
+            if(msg.m_sourceID != sourceID) {
+                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID, sourceID);
+
+                continue;
+            }
+
+            spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
+
+            data = std::move(msg.m_data);
+            m_scatter.messages.pop_back();
+
+            break;
+        }
     }
 }
 
@@ -566,34 +715,75 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
     }
 
     if(m_ID == destinationID) {
-        setState(State::Gather);
-
         std::unique_lock lock(m_gather.mutex);
-        m_gather.notifier.wait(lock);
 
-        if(m_gather.destinationID != destinationID) {
-            spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, m_gather.destinationID, destinationID);
+        // Check the already queued messages
+        do {
+            auto msgIterator = std::find_if(m_gather.messages.begin(), m_gather.messages.end(), [destinationID](auto &&msg) {
+                return (msg->m_destinationID == destinationID);
+            });
 
-            throw std::logic_error("MPI: Invalid destination ID!");
+            if(msgIterator != m_gather.messages.cend()) {
+                spdlog::trace("MPI({}): Gathering data with received message..", m_ID);
+
+                auto &msg = *msgIterator->get();
+
+                if((msg.m_data.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
+                    spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
+
+                    throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
+                }
+
+                const auto chunkSize = msg.m_data.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
+                spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
+
+                if(data.size() != chunkSize) {
+                    spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
+
+                    break;
+                }
+
+                msg.m_data.insert(msg.m_data.begin() + (m_ID * chunkSize), data.cbegin(), data.cend());
+                data = std::move(msg.m_data);
+                m_gather.messages.erase(msgIterator);
+
+                return;
+            }
+        } while(false);
+
+        // Wait for the message
+        while(true) {
+            m_gather.notifier.wait(lock);
+
+            auto &msg = *m_gather.messages.back();
+
+            if(msg.m_destinationID != destinationID) {
+                spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID, destinationID);
+
+                continue;
+            }
+
+            if((msg.m_data.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
+                spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
+
+                throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
+            }
+
+            const auto chunkSize = msg.m_data.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
+            spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
+
+            if(data.size() != chunkSize) {
+                spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
+
+                continue;
+            }
+
+            msg.m_data.insert(msg.m_data.begin() + (m_ID * chunkSize), data.cbegin(), data.cend());
+            data = std::move(msg.m_data);
+            m_gather.messages.pop_back();
+
+            break;
         }
-
-        if((m_gather.receivedData.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
-            spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, m_gather.receivedData.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
-
-            throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
-        }
-
-        const auto chunkSize = m_gather.receivedData.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
-        spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
-
-        if(data.size() != chunkSize) {
-            spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
-
-            throw std::runtime_error("MPI: Expected data size doesn't match the received chunk size!");
-        }
-
-        m_gather.receivedData.insert(m_gather.receivedData.cbegin() + (m_ID * chunkSize), data.cbegin(), data.cend());
-        data = std::move(m_gather.receivedData);
     }
     else {
         auto msg = std::make_unique<Messages::Gather>(destinationID);
@@ -613,9 +803,10 @@ void MPI::allGather(std::vector<float> &data)
         throw std::invalid_argument("MPI: Empty data given to all-gather!");
     }
 
-    setState(State::AllGather);
-
     const auto expectedSize = data.size() * Network::Utilities::deriveComputingNodeAmount();
+
+    // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
+    std::unique_lock lock(m_allGather.mutex);
 
     // Send first
     {
@@ -626,54 +817,23 @@ void MPI::allGather(std::vector<float> &data)
         m_port.pushOutgoing(std::move(msg));
     }
 
-    {
-        std::unique_lock lock(m_allGather.mutex);
+    // Wait for the message
+    while(true) {
         m_allGather.notifier.wait(lock);
 
-        if(m_allGather.receivedData.size() != expectedSize) {
-            spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, m_allGather.receivedData.size(), expectedSize);
+        auto &msg = *m_allGather.messages.back();
 
-            throw std::runtime_error("MPI: Received data size doesn't match the expected size!");
+        if(msg.m_data.size() != expectedSize) {
+            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), expectedSize);
+
+            continue;
         }
 
-        data = std::move(m_allGather.receivedData);
-        m_allGather.receivedData.clear();
+        spdlog::trace("MPI({}): All-gathering data with received message..", m_ID);
+
+        data = std::move(msg.m_data);
+        m_allGather.messages.pop_back();
+
+        break;
     }
-
-    setState(State::Idle);
-}
-
-void MPI::setState(const State state)
-{
-    if(State::Idle == state) {
-        m_state = state;
-
-        return;
-    }
-
-    if(State::Idle != m_state) {
-        spdlog::critical("MPI({}): Invalid state transition from {} to {}!", m_ID, toString(m_state), toString(state));
-
-        throw std::logic_error("Invalid MPI state transition!");
-    }
-
-    m_state = state;
-}
-
-const std::string &MPI::toString(const State state) const
-{
-    static const std::map<const State, const std::string> stateMap = {
-        {State::Idle, "Idle"},
-        {State::Acknowledge, "Acknowledge"},
-        {State::Receive, "Receive"},
-        {State::BroadcastReceive, "BroadcastReceive"},
-        {State::Barrier, "Barrier"},
-        {State::Reduce, "Reduce"},
-        {State::ReduceAll, "ReduceAll"},
-        {State::Scatter, "Scatter"},
-        {State::Gather, "Gather"},
-        {State::AllGather, "AllGather"}
-    };
-
-    return stateMap.at(state);
 }

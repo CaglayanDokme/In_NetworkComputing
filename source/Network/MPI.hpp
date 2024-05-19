@@ -19,20 +19,6 @@ namespace Network {
     public:
         using ReduceOp = Messages::ReduceOperation;
 
-    private:
-        enum class State {
-            Idle,
-            Acknowledge,
-            Receive,
-            BroadcastReceive,
-            Barrier,
-            Reduce,
-            ReduceAll,
-            Scatter,
-            Gather,
-            AllGather
-        };
-
     public: /** Construction **/
         MPI(const std::size_t ID);
 
@@ -132,35 +118,27 @@ namespace Network {
          */
         void allGather(std::vector<float> &data);
 
-    private:
-        void setState(const State state);
-        const std::string &toString(const State state) const;
-
     private: /** Members **/
         const std::size_t m_ID;
-        State m_state{State::Idle};
         Port m_port;
 
         // Acknowledge
         struct {
-            size_t sourceID{0};
-            Messages::e_Type ackType;
+            std::deque<std::unique_ptr<Messages::Acknowledge>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_acknowledge;
 
         // Direct receive
         struct {
-            decltype(Messages::DirectMessage::m_data) receivedData;
-            size_t sourceID{0};
+            std::deque<std::unique_ptr<Messages::DirectMessage>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_directReceive;
 
         // Broadcast receive
         struct {
-            decltype(Messages::BroadcastMessage::m_data) receivedData;
-            size_t sourceID{0};
+            std::deque<std::unique_ptr<Messages::BroadcastMessage>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_broadcastReceive;
@@ -173,39 +151,35 @@ namespace Network {
 
         // Reduce
         struct {
-            decltype(Messages::Reduce::m_data) receivedData;
-            ReduceOp operation;
+            std::deque<std::unique_ptr<Messages::Reduce>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_reduce;
 
         // Reduce all
         struct {
-            decltype(Messages::ReduceAll::m_data) receivedData{0.0f};
-            ReduceOp operation;
+            std::deque<std::unique_ptr<Messages::ReduceAll>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_reduceAll;
 
         // Scatter
         struct {
-            decltype(Messages::Scatter::m_data) receivedData;
-            size_t sourceID{0};
+            std::deque<std::unique_ptr<Messages::Scatter>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_scatter;
 
         // Gather
         struct {
-            decltype(Messages::Gather::m_data) receivedData;
-            size_t destinationID{0};
+            std::deque<std::unique_ptr<Messages::Gather>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_gather;
 
         // All gather
         struct {
-            decltype(Messages::AllGather::m_data) receivedData;
+            std::deque<std::unique_ptr<Messages::AllGather>> messages;
             std::mutex mutex;
             std::condition_variable notifier;
         } m_allGather;
