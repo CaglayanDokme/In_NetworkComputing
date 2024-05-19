@@ -98,6 +98,7 @@ namespace Network {
          * @param sourceID The ID of the source computing node
          *
          * @note If not the source node, the destination data(array) must be empty
+         * @attention The source node will get only the corresponding data chunk
          */
         void scatter(std::vector<float> &data, const size_t sourceID);
 
