@@ -14,9 +14,21 @@
 #include <mutex>
 
 namespace Network {
+    template<class T>
+    struct StateHolder {
+        std::deque<std::unique_ptr<T>> messages;
+        std::mutex mutex;
+        std::condition_variable notifier;
+    };
+
+    template<>
+    struct StateHolder<void> {
+        std::mutex mutex;
+        std::condition_variable notifier;
+    };
+
     class MPI {
-    public: /** Types **/
-    public:
+    public: /** Aliases **/
         using ReduceOp = Messages::ReduceOperation;
 
     public: /** Construction **/
@@ -161,66 +173,14 @@ namespace Network {
         const std::size_t m_ID;
         Port m_port;
 
-        // Acknowledge
-        struct {
-            std::deque<std::unique_ptr<Messages::Acknowledge>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_acknowledge;
-
-        // Direct receive
-        struct {
-            std::deque<std::unique_ptr<Messages::DirectMessage>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_directReceive;
-
-        // Broadcast receive
-        struct {
-            std::deque<std::unique_ptr<Messages::BroadcastMessage>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_broadcastReceive;
-
-        // Barrier
-        struct {
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_barrier;
-
-        // Reduce
-        struct {
-            std::deque<std::unique_ptr<Messages::Reduce>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_reduce;
-
-        // Reduce all
-        struct {
-            std::deque<std::unique_ptr<Messages::ReduceAll>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_reduceAll;
-
-        // Scatter
-        struct {
-            std::deque<std::unique_ptr<Messages::Scatter>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_scatter;
-
-        // Gather
-        struct {
-            std::deque<std::unique_ptr<Messages::Gather>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_gather;
-
-        // All gather
-        struct {
-            std::deque<std::unique_ptr<Messages::AllGather>> messages;
-            std::mutex mutex;
-            std::condition_variable notifier;
-        } m_allGather;
+        StateHolder<Messages::Acknowledge> m_acknowledge;
+        StateHolder<Messages::DirectMessage> m_directReceive;
+        StateHolder<Messages::BroadcastMessage> m_broadcastReceive;
+        StateHolder<Messages::Reduce> m_reduce;
+        StateHolder<Messages::ReduceAll> m_reduceAll;
+        StateHolder<Messages::Scatter> m_scatter;
+        StateHolder<Messages::Gather> m_gather;
+        StateHolder<Messages::AllGather> m_allGather;
+        StateHolder<void> m_barrier;
     };
 };
