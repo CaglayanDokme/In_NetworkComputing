@@ -273,6 +273,11 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
     throw std::runtime_error("MPI: Shall never reach here!");
 }
 
+void MPI::send(const float &data, const size_t destinationID)
+{
+    send(std::vector<float>{data}, destinationID);
+}
+
 void MPI::receive(std::vector<float> &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Receiving data from {}", m_ID, sourceID);
@@ -341,6 +346,20 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
         spdlog::trace("MPI({}): Sent {} acknowledgement to {}", m_ID, Messages::toString(Messages::e_Type::DirectMessage), sourceID);
     }
+}
+
+void MPI::receive(float &data, const size_t sourceID)
+{
+    std::vector<float> temp;
+    receive(temp, sourceID);
+
+    if(1 != temp.size()) {
+        spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size(1)!", m_ID, temp.size());
+
+        throw std::runtime_error("MPI: Received data size is not 1!");
+    }
+
+    data = temp.at(0);
 }
 
 void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
@@ -471,6 +490,28 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
     }
 }
 
+void MPI::broadcast(float &data, const size_t sourceID)
+{
+    if(sourceID == m_ID) {
+        std::vector<float> temp;
+        temp.push_back(data);
+
+        broadcast(temp, sourceID);
+    }
+    else {
+        std::vector<float> temp;
+        broadcast(temp, sourceID);
+
+        if(1 != temp.size()) {
+            spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size(1)!", m_ID, temp.size());
+
+            throw std::runtime_error("MPI: Received data size is not 1!");
+        }
+
+        data = temp.at(0);
+    }
+}
+
 void MPI::barrier()
 {
     spdlog::trace("MPI({}): Barrier", m_ID);
@@ -580,6 +621,22 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
     }
 }
 
+void MPI::reduce(float &data, const ReduceOp operation, const size_t destinationID)
+{
+    std::vector<float> temp;
+    temp.push_back(data);
+
+    reduce(temp, operation, destinationID);
+
+    if(1 != temp.size()) {
+        spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size(1)!", m_ID, temp.size());
+
+        throw std::runtime_error("MPI: Received data size is not 1!");
+    }
+
+    data = temp.at(0);
+}
+
 void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 {
     spdlog::trace("MPI({}): Reducing data", m_ID);
@@ -621,6 +678,22 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 
         break;
     }
+}
+
+void MPI::reduceAll(float &data, const ReduceOp operation)
+{
+    std::vector<float> temp;
+    temp.push_back(data);
+
+    reduceAll(temp, operation);
+
+    if(1 != temp.size()) {
+        spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size(1)!", m_ID, temp.size());
+
+        throw std::runtime_error("MPI: Received data size is not 1!");
+    }
+
+    data = temp.at(0);
 }
 
 void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
