@@ -187,10 +187,17 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
 
         // Check if this is the first reduce message
         if(std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; })) {
-            m_reduceStates.destinationID = msg->m_destinationID;
-            m_reduceStates.opType        = msg->m_opType;
-            m_reduceStates.value         = std::move(msg->m_data);
+            m_reduceStates.destinationID           = msg->m_destinationID;
+            m_reduceStates.destinationPortID       = m_reduceStates.destinationID / compNodePerPort;
+            m_reduceStates.opType                  = msg->m_opType;
+            m_reduceStates.value                   = std::move(msg->m_data);
             m_reduceStates.flags.at(sourcePortIdx) = true;
+
+            if(m_reduceStates.destinationPortID == sourcePortIdx) {
+                spdlog::critical("Core Switch({}): Source port(#{}) was actually the target port!", m_ID, sourcePortIdx);
+
+                throw std::runtime_error("Core Switch: Source port was actually the target port!");
+            }
         }
         else {
             if(m_reduceStates.flags.at(sourcePortIdx)) {
@@ -203,6 +210,18 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 spdlog::critical("Core Switch({}): Wrong reduce operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(m_reduceStates.opType), Messages::toString(msg->m_opType));
 
                 throw std::runtime_error("Core Switch: Operation types doesn't match in reduce messages!");
+            }
+
+            if(m_reduceStates.destinationPortID == sourcePortIdx) {
+                spdlog::critical("Core Switch({}): Source port(#{}) was actually the target port!", m_ID, sourcePortIdx);
+
+                throw std::runtime_error("Core Switch: Source port was actually the target port!");
+            }
+
+            if(m_reduceStates.destinationID != msg->m_destinationID) {
+                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID);
+
+                throw std::runtime_error("Core Switch: Destination ID doesn't match in reduce messages!");
             }
 
             m_reduceStates.flags.at(sourcePortIdx) = true;
