@@ -53,6 +53,13 @@ namespace Network {
         void send(const std::vector<float> &data, const size_t destinationID);
 
         /**
+         * @brief  Send a message to another computing node
+         * @param  data The data to be sent
+         * @param  destinationID The ID of the destination computing node
+         */
+        void send(const float &data, const size_t destinationID);
+
+        /**
          * @brief  Receive a message from another computing node
          * @param  data The data(array) to be received
          * @param  sourceID The ID of the source computing node
@@ -62,6 +69,13 @@ namespace Network {
         void receive(std::vector<float> &data, const size_t sourceID);
 
         /**
+         * @brief  Receive a message from another computing node
+         * @param  data The data to be received
+         * @param  sourceID The ID of the source computing node
+         */
+        void receive(float &data, const size_t sourceID);
+
+        /**
          * @brief Broadcast a message to all computing nodes or receive a broadcasted message
          * @param data The data(array) to be broadcasted or to be filled with the received data
          * @param sourceID The ID of the broadcaster node
@@ -69,6 +83,13 @@ namespace Network {
          * @note If receiving, the destination data(array) must be empty
          */
         void broadcast(std::vector<float> &data, const size_t sourceID);
+
+        /**
+         * @brief Broadcast a message to all computing nodes or receive a broadcasted message
+         * @param data The data to be broadcasted or to be filled with the received data
+         * @param sourceID The ID of the broadcaster node
+         */
+        void broadcast(float &data, const size_t sourceID);
 
         /**
          * @brief Get blocked until all computing nodes reach the barrier
@@ -86,11 +107,28 @@ namespace Network {
         void reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID);
 
         /**
+         * @brief Reduce the data of all computing nodes to a single node
+         * @param data          The data to be reduced
+         * @param operation     The operation to be applied during the reduction
+         * @param destinationID The ID of the destination computing node
+         *
+         * @note The destination node must also contribute to the reduction by providing data
+         */
+        void reduce(float &data, const ReduceOp operation, const size_t destinationID);
+
+        /**
          * @brief Reduce the data of all computing nodes to all nodes
          * @param data      The data(array) to be reduced
          * @param operation The operation to be applied during the reduction
          */
         void reduceAll(std::vector<float> &data, const ReduceOp operation);
+
+        /**
+         * @brief Reduce the data of all computing nodes to all nodes
+         * @param data      The data to be reduced
+         * @param operation The operation to be applied during the reduction
+         */
+        void reduceAll(float &data, const ReduceOp operation);
 
         /**
          * @brief Scatter the data of a single computing node to all computing nodes
