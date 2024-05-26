@@ -30,6 +30,10 @@ int main(const int argc, const char *const argv[])
              "\n6: No log",
              cxxopts::value<int>()->default_value(std::to_string(spdlog::level::info)))
 
+            ("network-computing",
+             "Enable in-network computing",
+             cxxopts::value<bool>()->default_value("true"))
+
             ("help", "Print help");
 
     cxxopts::ParseResult arguments;
@@ -53,6 +57,7 @@ int main(const int argc, const char *const argv[])
         return -1;
     }
 
+    const bool bInNetworkComputing = arguments["network-computing"].as<bool>();
     const std::size_t portPerSwitch = arguments["ports"].as<std::size_t>();
     spdlog::set_level(spdlog::level::level_enum(arguments["log-filter"].as<int>()));
     spdlog::info("Starting program..");
@@ -69,6 +74,14 @@ int main(const int argc, const char *const argv[])
     }
     else {
         spdlog::debug("Port per switch determined as {}", portPerSwitch);
+    }
+
+    Network::Switches::setNetworkComputing(bInNetworkComputing);
+    if(Network::Switches::isNetworkComputingEnabled()) {
+        spdlog::info("In-network computing is enabled!");
+    }
+    else {
+        spdlog::warn("In-network computing is disabled!");
     }
 
     // Derived constants

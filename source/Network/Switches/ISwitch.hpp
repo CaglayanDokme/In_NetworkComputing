@@ -4,6 +4,18 @@
 #include <vector>
 
 namespace Network::Switches {
+    /**
+     * @brief Initially, set the whether the switches will have computing capabilities
+     * @param enable True to enable in-network computing capabilities
+     */
+    void setNetworkComputing(const bool enable);
+
+    /**
+     * @brief  Check if the switches have computing capabilities
+     * @return True If the switches can compute
+     */
+    [[nodiscard]] bool isNetworkComputingEnabled();
+
     class ISwitch {
     protected: /** Construction **/
         /**
@@ -21,7 +33,6 @@ namespace Network::Switches {
 
         // Forbid copying
         ISwitch(const ISwitch &) = delete;
-
         ISwitch &operator=(const ISwitch &) = delete;
 
         // Must be move-able to store in containers
@@ -49,6 +60,12 @@ namespace Network::Switches {
          * @return True If all ports have been connected to another port
          */
         [[nodiscard]] bool isReady() const;
+
+        /**
+         * @brief  Check if the switch has computing capabilities
+         * @return True If the switch can compute
+         */
+        [[nodiscard]] bool canCompute() const;
 
     protected: /** Members **/
         const size_t m_ID;
