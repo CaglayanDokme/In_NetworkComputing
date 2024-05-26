@@ -640,12 +640,6 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
             }
         }
         else {
-            if(!state.value.empty()) {
-                spdlog::critical("Edge Switch({}): Reduce-all to-up value wasn't empty!!", m_ID);
-
-                throw std::runtime_error("Edge Switch: Reduce-all to-up value wasn't empty!!");
-            }
-
             state.bOngoing = true;
             state.opType   = msg->m_opType;
             state.value    = std::move(msg->m_data);
