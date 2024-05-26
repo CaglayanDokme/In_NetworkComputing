@@ -1202,6 +1202,12 @@ void Edge::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg ms
         throw std::runtime_error("Null message for redirection!");
     }
 
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::error("Edge Switch({}): Message {} doesn't have a destination ID!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Message doesn't have a destination ID!");
+    }
+
     // Decide on direction (up or down)
     if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
         spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);

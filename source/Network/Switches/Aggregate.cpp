@@ -857,6 +857,18 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 {
+    if(!msg) {
+        spdlog::error("Aggregate Switch({}): Received null message for redirection!", m_ID);
+
+        throw std::runtime_error("Null message for redirection!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::error("Aggregate Switch({}): Message {} doesn't have a destination ID!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Message doesn't have a destination ID!");
+    }
+
     // Decide on direction (up or down)
     if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
         spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);

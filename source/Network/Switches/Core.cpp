@@ -433,6 +433,18 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
 
 void Core::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 {
+    if(!msg) {
+        spdlog::error("Core Switch({}): Received null message for redirection!", m_ID);
+
+        throw std::runtime_error("Null message for redirection!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::error("Core Switch({}): Message {} doesn't have a destination ID!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Message doesn't have a destination ID!");
+    }
+
     const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
