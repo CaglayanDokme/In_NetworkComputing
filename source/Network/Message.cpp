@@ -9,7 +9,7 @@ BaseMessage::BaseMessage(const e_Type eType)
     // Nothing
 }
 
-std::string BaseMessage::typeToString() const
+const std::string & BaseMessage::typeToString() const
 {
     return toString(m_eType);
 }

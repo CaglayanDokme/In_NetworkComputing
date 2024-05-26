@@ -38,8 +38,7 @@ namespace Network::Messages {
 
     public: /** Methods **/
         [[nodiscard]] e_Type type() const { return m_eType; }
-
-        [[nodiscard]] std::string typeToString() const;
+        [[nodiscard]] const std::string &typeToString() const;
 
     protected:
         const e_Type m_eType;
