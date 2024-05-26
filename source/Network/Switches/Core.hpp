@@ -39,6 +39,13 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
 
+        /**
+         * @brief Redirect a message to its destination
+         * @param sourcePortIdx Index of the source port
+         * @param msg Message to be redirected
+         */
+        void redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg);
+
     private: /** Members **/
         std::map<std::size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False
 

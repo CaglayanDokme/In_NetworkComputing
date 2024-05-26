@@ -174,6 +174,15 @@ bool Edge::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
+        spdlog::trace("Edge Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+        // Is network computing enabled?
+        if(!canCompute()) {
+            redirect(sourcePortIdx, std::move(anyMsg));
+
+            continue;
+        }
+
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
@@ -264,31 +273,12 @@ Network::Port &Edge::getDownPort(const size_t &portID)
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
     if(!msg) {
-        spdlog::critical("Edge({}): Null message given!", m_ID);
-
-        throw std::invalid_argument("Edge: Null message given!");
-    }
-
-    if(!msg) {
         spdlog::error("Edge Switch({}): Received null direct message!", m_ID);
 
         throw std::runtime_error("Null direct message!");
     }
 
-    spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
-
-    // Decide on direction (up or down)
-    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
-        spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
-
-        auto &targetPort = search->second;
-        targetPort.pushOutgoing(std::move(msg));
-    }
-    else { // Re-direct to an up-port
-        spdlog::trace("Edge Switch({}): Redirecting to an up-port..", m_ID);
-
-        getAvailableUpPort().pushOutgoing(std::move(msg));
-    }
+    redirect(sourcePortIdx, std::move(msg));
 }
 
 void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
@@ -1201,6 +1191,28 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         state.bOngoing = true;
         state.receiveFlags.at(sourcePortIdx) = true;
         state.value = std::move(msg->m_data);
+    }
+}
+
+void Edge::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+{
+    if(!msg) {
+        spdlog::error("Edge Switch({}): Received null message for redirection!", m_ID);
+
+        throw std::runtime_error("Null message for redirection!");
+    }
+
+    // Decide on direction (up or down)
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
+        spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
+
+        auto &targetPort = search->second;
+        targetPort.pushOutgoing(std::move(msg));
+    }
+    else { // Re-direct to an up-port
+        spdlog::trace("Edge Switch({}): Redirecting to an up-port..", m_ID);
+
+        getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }
 

@@ -61,6 +61,13 @@ namespace Network::Switches {
         void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
 
         /**
+         * @brief Redirect a message to its destination
+         * @param sourcePortIdx Index of the source port
+         * @param msg Message to be redirected
+         */
+        void redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg);
+
+        /**
          * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)
          * @return Reference to the most available port
          */

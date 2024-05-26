@@ -142,6 +142,15 @@ bool Aggregate::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
+        spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+        // Is network computing enabled?
+        if(!canCompute()) {
+            redirect(sourcePortIdx, std::move(anyMsg));
+
+            continue;
+        }
+
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
@@ -219,21 +228,7 @@ Network::Port &Aggregate::getDownPort(const size_t &portID)
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
-    spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
-
-    // Decide on direction (up or down)
-    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
-        spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
-
-        auto &targetPort = search->second;
-
-        targetPort.pushOutgoing(std::move(msg));
-    }
-    else { // Re-direct to up-port(s)
-        spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
-
-        getAvailableUpPort().pushOutgoing(std::move(msg));
-    }
+    redirect(sourcePortIdx, std::move(msg));
 }
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
@@ -857,6 +852,23 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             state.value = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
+    }
+}
+
+void Aggregate::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+{
+    // Decide on direction (up or down)
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
+        spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+
+        auto &targetPort = search->second;
+
+        targetPort.pushOutgoing(std::move(msg));
+    }
+    else { // Re-direct to up-port(s)
+        spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+        getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }
 

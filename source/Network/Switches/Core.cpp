@@ -53,6 +53,13 @@ bool Core::tick()
 
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 
+        // Is network computing enabled?
+        if(!canCompute()) {
+            redirect(sourcePortIdx, std::move(anyMsg));
+
+            continue;
+        }
+
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
@@ -104,18 +111,7 @@ bool Core::tick()
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
-    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID.value());
-
-    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
-    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
-
-    if(sourcePortIdx == targetPortIdx) {
-        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
-
-        throw std::runtime_error("Core Switch: Target and source ports are the same!");
-    }
-
-    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
+    redirect(sourcePortIdx, std::move(msg));
 }
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
@@ -433,4 +429,18 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         m_allGatherStates.value = std::move(msg->m_data);
         m_allGatherStates.flags.at(sourcePortIdx) = true;
     }
+}
+
+void Core::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+{
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
+    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
+
+    if(sourcePortIdx == targetPortIdx) {
+        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Target and source ports are the same!");
+    }
+
+    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
