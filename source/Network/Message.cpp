@@ -34,8 +34,20 @@ BroadcastMessage::BroadcastMessage(const std::size_t sourceID)
     // Nothing
 }
 
+BroadcastMessage::BroadcastMessage(const std::size_t sourceID, const std::size_t destinationID)
+: BaseMessage(e_Type::BroadcastMessage, sourceID, destinationID)
+{
+    // Nothing
+}
+
 BarrierRequest::BarrierRequest(const std::size_t sourceID)
 : BaseMessage(e_Type::BarrierRequest, sourceID)
+{
+    // Nothing
+}
+
+BarrierRequest::BarrierRequest(const std::size_t sourceID, const std::size_t destinationID)
+: BaseMessage(e_Type::BarrierRequest, sourceID, destinationID)
 {
     // Nothing
 }
@@ -46,8 +58,20 @@ BarrierRelease::BarrierRelease()
     // Nothing
 }
 
+BarrierRelease::BarrierRelease(const std::size_t sourceID, const std::size_t destinationID)
+: BaseMessage(e_Type::BarrierRelease, sourceID, destinationID)
+{
+    // Nothing
+}
+
 Reduce::Reduce(const std::size_t destinationID, const OpType opType)
 : BaseMessage(e_Type::Reduce, std::nullopt, destinationID), m_opType(opType)
+{
+    // Nothing
+}
+
+Reduce::Reduce(const std::size_t sourceID, const std::size_t destinationID, const OpType opType)
+: BaseMessage(e_Type::Reduce, sourceID, destinationID), m_opType(opType)
 {
     // Nothing
 }
@@ -58,8 +82,20 @@ ReduceAll::ReduceAll(const OpType opType)
     // Nothing
 }
 
+ReduceAll::ReduceAll(const std::size_t sourceID, const std::size_t destinationID, const OpType opType)
+: BaseMessage(e_Type::ReduceAll, sourceID, destinationID), m_opType(opType)
+{
+    // Nothing
+}
+
 Scatter::Scatter(const std::size_t sourceID)
 : BaseMessage(e_Type::Scatter, sourceID)
+{
+    // Nothing
+}
+
+Scatter::Scatter(const std::size_t destinationID, const std::size_t sourceID)
+: BaseMessage(e_Type::Scatter, sourceID, destinationID)
 {
     // Nothing
 }
@@ -70,8 +106,20 @@ Gather::Gather(const std::size_t destinationID)
     // Nothing
 }
 
+Gather::Gather(const std::size_t sourceID, const std::size_t destinationID)
+: BaseMessage(e_Type::Gather, sourceID, destinationID)
+{
+    // Nothing
+}
+
 AllGather::AllGather()
 : BaseMessage(e_Type::AllGather)
+{
+    // Nothing
+}
+
+AllGather::AllGather(const std::size_t sourceID, const std::size_t destinationID)
+: BaseMessage(e_Type::AllGather, sourceID, destinationID)
 {
     // Nothing
 }
