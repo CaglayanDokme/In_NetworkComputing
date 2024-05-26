@@ -104,9 +104,9 @@ bool Core::tick()
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
-    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID);
+    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID.value());
 
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
     if(sourcePortIdx == targetPortIdx) {
@@ -120,9 +120,9 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Di
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
-    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID);
+    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID.value());
 
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
     if(sourcePortIdx == targetPortIdx) {
@@ -153,8 +153,8 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
 {
     // Process message
     {
-        if(auto &barrierRequest = m_barrierRequestFlags.at(msg->m_sourceID); barrierRequest) {
-            spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg->m_sourceID);
+        if(auto &barrierRequest = m_barrierRequestFlags.at(msg->m_sourceID.value()); barrierRequest) {
+            spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg->m_sourceID.value());
         }
         else {
             barrierRequest = true;
@@ -183,11 +183,11 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
 {
     // Process message
     {
-        spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg->m_destinationID);
+        spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg->m_destinationID.value());
 
         // Check if this is the first reduce message
         if(std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; })) {
-            m_reduceStates.destinationID           = msg->m_destinationID;
+            m_reduceStates.destinationID           = msg->m_destinationID.value();
             m_reduceStates.destinationPortID       = m_reduceStates.destinationID / compNodePerPort;
             m_reduceStates.opType                  = msg->m_opType;
             m_reduceStates.value                   = std::move(msg->m_data);
@@ -218,8 +218,8 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 throw std::runtime_error("Core Switch: Source port was actually the target port!");
             }
 
-            if(m_reduceStates.destinationID != msg->m_destinationID) {
-                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID);
+            if(m_reduceStates.destinationID != msg->m_destinationID.value()) {
+                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID.value());
 
                 throw std::runtime_error("Core Switch: Destination ID doesn't match in reduce messages!");
             }
@@ -338,7 +338,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
             continue;
         }
 
-        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
         txMsg->m_data.resize(compNodePerPort);
 
         const auto firstCompNodeIdx = targetPortIdx * compNodePerPort;
@@ -369,7 +369,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         throw std::runtime_error("Core Switch: Received empty inter-switch gather message!");
     }
 
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
     if(sourcePortIdx == targetPortIdx) {

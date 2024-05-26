@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <optional>
 #include <stdexcept>
 
 namespace Network::Messages {
@@ -32,15 +33,20 @@ namespace Network::Messages {
     };
 
     class BaseMessage {
+    public: /** Aliases **/
+        using Address = std::optional<std::size_t>;
+
     protected: /** Construction **/
         BaseMessage() = delete;
-        BaseMessage(const e_Type eType);
+        BaseMessage(const e_Type eType, const Address &sourceID = std::nullopt, const Address &destinationID = std::nullopt);
 
     public: /** Methods **/
         [[nodiscard]] e_Type type() const { return m_eType; }
         [[nodiscard]] const std::string &typeToString() const;
 
-    protected:
+    public: /** Members **/
+        const Address m_sourceID;
+        const Address m_destinationID;
         const e_Type m_eType;
     };
 
@@ -50,8 +56,6 @@ namespace Network::Messages {
         explicit Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType);
 
     public: /** Addressing **/
-        const std::size_t m_sourceID;
-        const std::size_t m_destinationID;
         const e_Type m_ackType;
     };
 
@@ -59,10 +63,6 @@ namespace Network::Messages {
     public: /** Construction **/
         DirectMessage() = delete;
         explicit DirectMessage(const std::size_t sourceID, const std::size_t destinationID);
-
-    public: /** Addressing **/
-        const std::size_t m_sourceID;
-        const std::size_t m_destinationID;
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -73,9 +73,6 @@ namespace Network::Messages {
         BroadcastMessage() = delete;
         explicit BroadcastMessage(const std::size_t sourceID);
 
-    public: /** Addressing **/
-        const std::size_t m_sourceID;
-
     public: /** Data **/
         std::vector<float> m_data;
     };
@@ -84,9 +81,6 @@ namespace Network::Messages {
     public: /** Construction **/
         BarrierRequest() = delete;
         explicit BarrierRequest(const std::size_t sourceID);
-
-    public: /** Addressing **/
-        const std::size_t m_sourceID;
     };
 
     class BarrierRelease : public BaseMessage {
@@ -103,9 +97,6 @@ namespace Network::Messages {
     public: /** Construction **/
         Reduce() = delete;
         explicit Reduce(const std::size_t destinationID, const OpType opType);
-
-    public: /** Addressing **/
-        const std::size_t m_destinationID;
 
     public: /** Data **/
         const OpType m_opType;
@@ -130,9 +121,6 @@ namespace Network::Messages {
         Scatter() = delete;
         explicit Scatter(const std::size_t sourceID);
 
-    public: /** Addressing **/
-        const std::size_t m_sourceID;
-
     public: /** Data **/
         std::vector<float> m_data;
     };
@@ -141,9 +129,6 @@ namespace Network::Messages {
     public: /** Construction **/
         Gather() = delete;
         explicit Gather(const std::size_t destinationID);
-
-    public: /** Addressing **/
-        const std::size_t m_destinationID;
 
     public: /** Data **/
         std::vector<float> m_data;

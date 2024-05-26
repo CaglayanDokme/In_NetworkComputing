@@ -275,10 +275,10 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Di
         throw std::runtime_error("Null direct message!");
     }
 
-    spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
+    spdlog::trace("Edge Switch({}): Message received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
 
     // Decide on direction (up or down)
-    if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
         spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
 
         auto &targetPort = search->second;
@@ -299,10 +299,10 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ac
         throw std::invalid_argument("Edge: Null message given!");
     }
 
-    spdlog::trace("Edge Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
+    spdlog::trace("Edge Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
 
     // Decide on direction (up or down)
-    if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
         spdlog::trace("Edge Switch({}): Redirecting to a down-port..", m_ID);
 
         auto &targetPort = search->second;
@@ -366,7 +366,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
 
     if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
         spdlog::critical("Edge Switch({}): Barrier request received from an up-port!", m_ID);
-        spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg->m_sourceID);
+        spdlog::debug("Edge Switch({}): Source ID was #{}!", m_ID, msg->m_sourceID.value());
 
         throw std::runtime_error("Barrier request in wrong direction!");
     }
@@ -423,7 +423,7 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
     }
 
     // Decide on direction
-    const bool bToUp = (m_downPortTable.find(msg->m_destinationID) == m_downPortTable.end());
+    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
 
     if(bToUp) {
         if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
@@ -443,7 +443,7 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
 
         if(!state.bOngoing) {
             state.bOngoing      = true;
-            state.destinationID = msg->m_destinationID;
+            state.destinationID = msg->m_destinationID.value();
             state.opType        = msg->m_opType;
             state.value         = std::move(msg->m_data);
 
@@ -456,8 +456,8 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
                 throw std::runtime_error("Edge Switch: This port has already sent a reduce message!");
             }
 
-            if(state.destinationID != msg->m_destinationID) {
-                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID, state.destinationID);
+            if(state.destinationID != msg->m_destinationID.value()) {
+                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID.value(), state.destinationID);
 
                 throw std::runtime_error("Edge Switch: The destination ID is different!");
             }
@@ -513,12 +513,12 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
 
         if(!state.bOngoing) {
             state.bOngoing      = true;
-            state.destinationID = msg->m_destinationID;
+            state.destinationID = msg->m_destinationID.value();
             state.opType        = msg->m_opType;
             state.value         = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
 
-            if(getPort(sourcePortIdx) == m_downPortTable.at(msg->m_destinationID)) {
+            if(getPort(sourcePortIdx) == m_downPortTable.at(msg->m_destinationID.value())) {
                 spdlog::critical("Edge Switch({}): Received a reduce message destined to the source itself(Port: #{})!", m_ID, sourcePortIdx);
 
                 throw std::runtime_error("Edge Switch: Received a reduce message destined to the source itself!");
@@ -531,8 +531,8 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
                 throw std::runtime_error("Edge Switch: This port has already sent a reduce message!");
             }
 
-            if(state.destinationID != msg->m_destinationID) {
-                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID, state.destinationID);
+            if(state.destinationID != msg->m_destinationID.value()) {
+                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID.value(), state.destinationID);
 
                 throw std::runtime_error("Edge Switch: The destination ID is different!");
             }
@@ -745,8 +745,8 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
     static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
 
-    if(m_downPortTable.at(msg->m_sourceID) != getPort(sourcePortIdx)) {
-        spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID, sourcePortIdx);
+    if(m_downPortTable.at(msg->m_sourceID.value()) != getPort(sourcePortIdx)) {
+        spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID.value(), sourcePortIdx);
 
         throw std::runtime_error("Edge Switch: Source ID and source port index didn't match in scatter message!");
     }
@@ -772,7 +772,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
             spdlog::trace("Edge Switch({}): Redirecting section [{}, {}) to down-port #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
 
-            auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID);
+            auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID.value());
             uniqueMsg->m_data.reserve(chunkSize);
             uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
 
@@ -794,7 +794,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
     // Re-direct the rest to aggregate switch
     {
-        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
 
         txMsg->m_data.resize(remainingCompNodeAmount);
 
@@ -830,7 +830,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
         throw std::runtime_error("Edge: Gather message received from an up-port!");
     }
 
-    const bool bToUp = (m_downPortTable.find(msg->m_destinationID) == m_downPortTable.end());
+    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
 
     if(bToUp) {
         auto &state = m_gatherStates.toUp;
@@ -848,8 +848,8 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
                 throw std::runtime_error("Edge: Gather state value size is corrupted!");
             }
 
-            if(state.destinationID != msg->m_destinationID) {
-                spdlog::critical("Edge({}): Destination IDs mismatch in gather messages! Expected {}, received {}", m_ID, state.destinationID, msg->m_destinationID);
+            if(state.destinationID != msg->m_destinationID.value()) {
+                spdlog::critical("Edge({}): Destination IDs mismatch in gather messages! Expected {}, received {}", m_ID, state.destinationID, msg->m_destinationID.value());
 
                 throw std::runtime_error("Edge: Destination IDs mismatch in gather messages!");
             }
@@ -894,7 +894,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
         }
         else {
             state.bOngoing = true;
-            state.destinationID = msg->m_destinationID;
+            state.destinationID = msg->m_destinationID.value();
 
             if(state.value.size() != getDownPortAmount()) {
                 spdlog::critical("Edge({}): Gather state value size is corrupted! Expected size {}, detected {}", m_ID, getDownPortAmount(), state.value.size());
@@ -913,7 +913,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
     else {
         auto &state = m_gatherStates.toDown;
 
-        if(state.push(firstCompNodeIdx + (sourcePortIdx - getUpPortAmount()), msg->m_destinationID, std::move(msg->m_data))) {
+        if(state.push(firstCompNodeIdx + (sourcePortIdx - getUpPortAmount()), msg->m_destinationID.value(), std::move(msg->m_data))) {
             auto txMsg = std::make_unique<Messages::Gather>(state.destinationID);
 
             txMsg->m_data.reserve(std::accumulate(state.value.cbegin(), state.value.cend(), 0, [](int sum, const auto &elem) { return sum + elem.size(); }));
@@ -1033,7 +1033,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
             throw std::runtime_error("Edge: Scatter message doesn't contain computing node!");
         }
         else if(1 == count) {
-            auto txMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID);
+            auto txMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID.value());
             txMsg->m_data = std::move(std::find_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; })->second);
 
             if(txMsg->m_data.size() != refSize) {
@@ -1080,7 +1080,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
             throw std::runtime_error("Edge: Redirect flag asserted too early!");
         }
 
-        bRedirect |= m_gatherStates.toDown.push(pair.first, msg->m_destinationID, std::move(pair.second));
+        bRedirect |= m_gatherStates.toDown.push(pair.first, msg->m_destinationID.value(), std::move(pair.second));
     }
 
     if(bRedirect) {

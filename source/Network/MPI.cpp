@@ -35,13 +35,13 @@ void MPI::tick()
         case Messages::e_Type::Acknowledge: {
             auto pMsg = std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge *>(anyMsg.release())));
 
-            if(pMsg->m_destinationID != m_ID) {
-                spdlog::critical("MPI({}): Received acknowledgement for another destination({})!", m_ID, pMsg->m_destinationID);
+            if(pMsg->m_destinationID.value() != m_ID) {
+                spdlog::critical("MPI({}): Received acknowledgement for another destination({})!", m_ID, pMsg->m_destinationID.value());
 
                 throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            spdlog::trace("MPI({}): Enqueueing {} acknowledgement from node #{}", m_ID, Messages::toString(pMsg->m_ackType), pMsg->m_sourceID);
+            spdlog::trace("MPI({}): Enqueueing {} acknowledgement from node #{}", m_ID, Messages::toString(pMsg->m_ackType), pMsg->m_sourceID.value());
 
             {
                 std::lock_guard lock(m_acknowledge.mutex);
@@ -55,13 +55,13 @@ void MPI::tick()
         case Messages::e_Type::DirectMessage: {
             auto pMsg = std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage *>(anyMsg.release())));
 
-            if(pMsg->m_destinationID != m_ID) {
-                spdlog::critical("MPI({}): Received direct message for another destination({})!", m_ID, pMsg->m_destinationID);
+            if(pMsg->m_destinationID.value() != m_ID) {
+                spdlog::critical("MPI({}): Received direct message for another destination({})!", m_ID, pMsg->m_destinationID.value());
 
                 throw std::logic_error("MPI: Invalid destination ID!");
             }
 
-            spdlog::trace("MPI({}): Enqueueing direct message from node #{}", m_ID, pMsg->m_sourceID);
+            spdlog::trace("MPI({}): Enqueueing direct message from node #{}", m_ID, pMsg->m_sourceID.value());
 
             {
                 std::lock_guard lock(m_directReceive.mutex);
@@ -75,13 +75,13 @@ void MPI::tick()
         case Messages::e_Type::BroadcastMessage: {
             auto pMsg = std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage *>(anyMsg.release())));
 
-            if(pMsg->m_sourceID == m_ID) {
+            if(pMsg->m_sourceID.value() == m_ID) {
                 spdlog::critical("MPI({}): Received broadcast message from itself!", m_ID);
 
                 throw std::logic_error("MPI: Cannot receive broadcast message from itself!");
             }
 
-            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID);
+            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID.value());
 
             {
                 std::lock_guard lock(m_broadcastReceive.mutex);
@@ -100,8 +100,8 @@ void MPI::tick()
         case Messages::e_Type::Reduce: {
             auto pMsg = std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce *>(anyMsg.release())));
 
-            if(pMsg->m_destinationID != m_ID) {
-                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID);
+            if(pMsg->m_destinationID.value() != m_ID) {
+                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID.value());
 
                 throw std::logic_error("MPI: Invalid destination ID!");
             }
@@ -134,13 +134,13 @@ void MPI::tick()
         case Messages::e_Type::Scatter: {
             auto pMsg = std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter *>(anyMsg.release())));
 
-            if(pMsg->m_sourceID == m_ID) {
+            if(pMsg->m_sourceID.value() == m_ID) {
                 spdlog::critical("MPI({}): Received {} message from itself!", m_ID, pMsg->typeToString());
 
                 throw std::logic_error("MPI: Cannot receive scatter message from itself!");
             }
 
-            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID);
+            spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID.value());
 
             {
                 std::lock_guard lock(m_scatter.mutex);
@@ -154,8 +154,8 @@ void MPI::tick()
         case Messages::e_Type::Gather: {
             auto pMsg = std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather *>(anyMsg.release())));
 
-            if(pMsg->m_destinationID != m_ID) {
-                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID);
+            if(pMsg->m_destinationID.value() != m_ID) {
+                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID.value());
 
                 throw std::logic_error("MPI: Invalid destination ID!");
             }
@@ -226,7 +226,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
             std::lock_guard lock(m_acknowledge.mutex);
 
             auto msgIterator = std::find_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [destinationID](auto &&msg) {
-                return ((msg->m_sourceID == destinationID) && (Messages::e_Type::DirectMessage == msg->m_ackType));
+                return ((msg->m_sourceID.value() == destinationID) && (Messages::e_Type::DirectMessage == msg->m_ackType));
             });
 
             if(msgIterator != m_acknowledge.messages.cend()) {
@@ -247,8 +247,8 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
 
             const auto &msg = *m_acknowledge.messages.back();
 
-            if(msg.m_sourceID != destinationID) {
-                spdlog::warn("MPI({}): Received acknowledgement from another source({}), expected note #{}", m_ID, msg.m_sourceID, destinationID);
+            if(msg.m_sourceID.value() != destinationID) {
+                spdlog::warn("MPI({}): Received acknowledgement from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), destinationID);
 
                 continue;
             }
@@ -302,7 +302,7 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
         // Visit the reception queue
         {
             auto msgIterator = std::find_if(m_directReceive.messages.begin(), m_directReceive.messages.end(), [sourceID](auto &&msg) {
-                return (msg->m_sourceID == sourceID);
+                return (msg->m_sourceID.value() == sourceID);
             });
 
             if(msgIterator != m_directReceive.messages.cend()) {
@@ -324,8 +324,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
             auto &msg = *m_directReceive.messages.back();
 
-            if(msg.m_sourceID != sourceID) {
-                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID, sourceID);
+            if(msg.m_sourceID.value() != sourceID) {
+                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
 
                 continue;
             }
@@ -395,14 +395,14 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                         return false;
                     }
 
-                    if(acks.at(msg->m_sourceID)) {
-                        spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg->m_sourceID);
+                    if(acks.at(msg->m_sourceID.value())) {
+                        spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
 
                         throw std::logic_error("MPI: Duplicate acknowledgement!");
                     }
 
-                    spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg->typeToString(), msg->m_sourceID);
-                    acks.at(msg->m_sourceID) = true;
+                    spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg->typeToString(), msg->m_sourceID.value());
+                    acks.at(msg->m_sourceID.value()) = true;
 
                     return true;
                 });
@@ -420,14 +420,14 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                     continue;
                 }
 
-                if(acks.at(msg.m_sourceID)) {
-                    spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg.m_sourceID);
+                if(acks.at(msg.m_sourceID.value())) {
+                    spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
 
                     throw std::logic_error("MPI: Duplicate acknowledgement!");
                 }
 
-                spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), msg.m_sourceID);
-                acks.at(msg.m_sourceID) = true;
+                spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), msg.m_sourceID.value());
+                acks.at(msg.m_sourceID.value()) = true;
             }
 
             spdlog::trace("MPI({}): Received all acknowledgements", m_ID);
@@ -447,7 +447,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         // Check the already queued messages
         {
             auto msgIterator = std::find_if(m_broadcastReceive.messages.begin(), m_broadcastReceive.messages.end(), [sourceID](auto &&msg) {
-                return (msg->m_sourceID == sourceID);
+                return (msg->m_sourceID.value() == sourceID);
             });
 
             if(msgIterator != m_broadcastReceive.messages.cend()) {
@@ -468,8 +468,8 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
             auto &msg = *m_broadcastReceive.messages.back();
 
-            if(msg.m_sourceID != sourceID) {
-                spdlog::warn("MPI({}): Received {} message from another source({}), expected note #{}", m_ID, msg.typeToString(), msg.m_sourceID, sourceID);
+            if(msg.m_sourceID.value() != sourceID) {
+                spdlog::warn("MPI({}): Received {} message from another source({}), expected note #{}", m_ID, msg.typeToString(), msg.m_sourceID.value(), sourceID);
 
                 continue;
             }
@@ -742,7 +742,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
         // Check the already queued messages
         {
             auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
-                return (msg->m_sourceID == sourceID);
+                return (msg->m_sourceID.value() == sourceID);
             });
 
             if(msgIterator != m_scatter.messages.cend()) {
@@ -763,8 +763,8 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
             auto &msg = *m_scatter.messages.back();
 
-            if(msg.m_sourceID != sourceID) {
-                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID, sourceID);
+            if(msg.m_sourceID.value() != sourceID) {
+                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
 
                 continue;
             }
@@ -795,7 +795,7 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
         // Check the already queued messages
         do {
             auto msgIterator = std::find_if(m_gather.messages.begin(), m_gather.messages.end(), [destinationID](auto &&msg) {
-                return (msg->m_destinationID == destinationID);
+                return (msg->m_destinationID.value() == destinationID);
             });
 
             if(msgIterator != m_gather.messages.cend()) {
@@ -832,8 +832,8 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
 
             auto &msg = *m_gather.messages.back();
 
-            if(msg.m_destinationID != destinationID) {
-                spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID, destinationID);
+            if(msg.m_destinationID.value() != destinationID) {
+                spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID.value(), destinationID);
 
                 continue;
             }

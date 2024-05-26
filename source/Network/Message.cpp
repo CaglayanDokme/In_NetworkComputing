@@ -3,8 +3,8 @@
 
 using namespace Network::Messages;
 
-BaseMessage::BaseMessage(const e_Type eType)
-: m_eType(eType)
+BaseMessage::BaseMessage(const e_Type eType, const Address &sourceID, const Address &destinationID)
+: m_eType(eType), m_sourceID(sourceID), m_destinationID(destinationID)
 {
     // Nothing
 }
@@ -15,7 +15,7 @@ const std::string & BaseMessage::typeToString() const
 }
 
 Acknowledge::Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType)
-: BaseMessage(e_Type::Acknowledge), m_sourceID(sourceID), m_destinationID(destinationID), m_ackType(ackType)
+: BaseMessage(e_Type::Acknowledge, sourceID, destinationID), m_ackType(ackType)
 {
     if(e_Type::Acknowledge == m_ackType) {
         throw std::invalid_argument("Acknowledge type cannot be Acknowledge");
@@ -23,19 +23,19 @@ Acknowledge::Acknowledge(const std::size_t sourceID, const std::size_t destinati
 }
 
 DirectMessage::DirectMessage(const std::size_t sourceID, const std::size_t destinationID)
-: BaseMessage(e_Type::DirectMessage), m_sourceID(sourceID), m_destinationID(destinationID), m_data()
+: BaseMessage(e_Type::DirectMessage, sourceID, destinationID), m_data()
 {
     // Nothing
 }
 
 BroadcastMessage::BroadcastMessage(const std::size_t sourceID)
-: BaseMessage(e_Type::BroadcastMessage), m_sourceID(sourceID)
+: BaseMessage(e_Type::BroadcastMessage, sourceID)
 {
     // Nothing
 }
 
 BarrierRequest::BarrierRequest(const std::size_t sourceID)
-: BaseMessage(e_Type::BarrierRequest), m_sourceID(sourceID)
+: BaseMessage(e_Type::BarrierRequest, sourceID)
 {
     // Nothing
 }
@@ -47,7 +47,7 @@ BarrierRelease::BarrierRelease()
 }
 
 Reduce::Reduce(const std::size_t destinationID, const OpType opType)
-: BaseMessage(e_Type::Reduce), m_destinationID(destinationID), m_opType(opType)
+: BaseMessage(e_Type::Reduce, std::nullopt, destinationID), m_opType(opType)
 {
     // Nothing
 }
@@ -59,13 +59,13 @@ ReduceAll::ReduceAll(const OpType opType)
 }
 
 Scatter::Scatter(const std::size_t sourceID)
-: BaseMessage(e_Type::Scatter), m_sourceID(sourceID)
+: BaseMessage(e_Type::Scatter, sourceID)
 {
     // Nothing
 }
 
 Gather::Gather(const std::size_t destinationID)
-: BaseMessage(e_Type::Gather), m_destinationID(destinationID)
+: BaseMessage(e_Type::Gather, destinationID)
 {
     // Nothing
 }
