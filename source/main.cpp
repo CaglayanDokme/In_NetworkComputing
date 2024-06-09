@@ -7,7 +7,7 @@
 #include "Network/Switches/Aggregate.hpp"
 #include "Network/Switches/Core.hpp"
 #include "Network/Switches/Edge.hpp"
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 #include "Computer.hpp"
 
 int main(const int argc, const char *const argv[])
@@ -74,6 +74,8 @@ int main(const int argc, const char *const argv[])
     }
     else {
         spdlog::debug("Port per switch determined as {}", portPerSwitch);
+
+        Network::Constants::setPortPerSwitch(portPerSwitch);
     }
 
     Network::Switches::setNetworkComputing(bInNetworkComputing);
@@ -85,10 +87,10 @@ int main(const int argc, const char *const argv[])
     }
 
     // Derived constants
-    const std::size_t coreSwitchAmount      = Network::Utilities::deriveCoreSwitchAmount(portPerSwitch);
-    const std::size_t aggregateSwitchAmount = Network::Utilities::deriveAggregateSwitchAmount(portPerSwitch);
-    const std::size_t edgeSwitchAmount      = Network::Utilities::deriveEdgeSwitchAmount(portPerSwitch);
-    const std::size_t compNodeAmount        = Network::Utilities::deriveComputingNodeAmount(portPerSwitch);
+    const std::size_t coreSwitchAmount      = Network::Constants::deriveCoreSwitchAmount();
+    const std::size_t aggregateSwitchAmount = Network::Constants::deriveAggregateSwitchAmount();
+    const std::size_t edgeSwitchAmount      = Network::Constants::deriveEdgeSwitchAmount();
+    const std::size_t compNodeAmount        = Network::Constants::deriveComputingNodeAmount();
 
     // Nodes (Switch & Compute)
     std::vector<Network::Switches::Core> coreSwitches;

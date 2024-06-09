@@ -181,6 +181,7 @@ namespace Network {
         StateHolder<Messages::Scatter> m_scatter;
         StateHolder<Messages::Gather> m_gather;
         StateHolder<Messages::AllGather> m_allGather;
-        StateHolder<void> m_barrier;
+        StateHolder<Messages::BarrierRequest> m_barrierRequest;
+        StateHolder<Messages::BarrierRelease> m_barrierRelease;
     };
 };

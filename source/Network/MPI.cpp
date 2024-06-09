@@ -32,15 +32,25 @@ void MPI::tick()
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
+    if(anyMsg->m_destinationID.has_value()) {
+        if(anyMsg->m_destinationID.value() != m_ID) {
+            spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, anyMsg->typeToString(), anyMsg->m_destinationID.value());
+
+            throw std::logic_error("MPI: Invalid destination ID!");
+        }
+    }
+
+    if(anyMsg->m_sourceID.has_value()) {
+        if(anyMsg->m_sourceID.value() == m_ID) {
+            spdlog::critical("MPI({}): Received message from itself!", m_ID);
+
+            throw std::logic_error("MPI: Cannot receive message from itself!");
+        }
+    }
+
     switch(anyMsg->type()) {
         case Messages::e_Type::Acknowledge: {
             auto pMsg = std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge *>(anyMsg.release())));
-
-            if(pMsg->m_destinationID.value() != m_ID) {
-                spdlog::critical("MPI({}): Received acknowledgement for another destination({})!", m_ID, pMsg->m_destinationID.value());
-
-                throw std::logic_error("MPI: Invalid destination ID!");
-            }
 
             spdlog::trace("MPI({}): Enqueueing {} acknowledgement from node #{}", m_ID, Messages::toString(pMsg->m_ackType), pMsg->m_sourceID.value());
 
@@ -56,12 +66,6 @@ void MPI::tick()
         case Messages::e_Type::DirectMessage: {
             auto pMsg = std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage *>(anyMsg.release())));
 
-            if(pMsg->m_destinationID.value() != m_ID) {
-                spdlog::critical("MPI({}): Received direct message for another destination({})!", m_ID, pMsg->m_destinationID.value());
-
-                throw std::logic_error("MPI: Invalid destination ID!");
-            }
-
             spdlog::trace("MPI({}): Enqueueing direct message from node #{}", m_ID, pMsg->m_sourceID.value());
 
             {
@@ -76,12 +80,6 @@ void MPI::tick()
         case Messages::e_Type::BroadcastMessage: {
             auto pMsg = std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage *>(anyMsg.release())));
 
-            if(pMsg->m_sourceID.value() == m_ID) {
-                spdlog::critical("MPI({}): Received broadcast message from itself!", m_ID);
-
-                throw std::logic_error("MPI: Cannot receive broadcast message from itself!");
-            }
-
             spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID.value());
 
             {
@@ -93,19 +91,41 @@ void MPI::tick()
 
             break;
         }
+        case Messages::e_Type::BarrierRequest: {
+            auto pMsg = std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest *>(anyMsg.release())));
+
+            spdlog::trace("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value());
+
+            {
+                std::lock_guard lock(m_barrierRequest.mutex);
+                m_barrierRequest.messages.push_back(std::move(pMsg));
+            }
+
+            m_barrierRequest.notifier.notify_all();
+
+            break;
+        }
         case Messages::e_Type::BarrierRelease: {
-            m_barrier.notifier.notify_all();
+            auto pMsg = std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease *>(anyMsg.release())));
+
+            if(!Network::Switches::isNetworkComputingEnabled()) {
+                spdlog::trace("MPI({}): Enqueueing barrier release from node #{}", m_ID, pMsg->m_sourceID.value());
+            }
+            else {
+                spdlog::trace("MPI({}): Enqueueing barrier release..", m_ID);
+            }
+
+            {
+                std::lock_guard lock(m_barrierRelease.mutex);
+                m_barrierRelease.messages.push_back(std::move(pMsg));
+            }
+
+            m_barrierRelease.notifier.notify_all();
 
             break;
         }
         case Messages::e_Type::Reduce: {
             auto pMsg = std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce *>(anyMsg.release())));
-
-            if(pMsg->m_destinationID.value() != m_ID) {
-                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID.value());
-
-                throw std::logic_error("MPI: Invalid destination ID!");
-            }
 
             spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
@@ -135,12 +155,6 @@ void MPI::tick()
         case Messages::e_Type::Scatter: {
             auto pMsg = std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter *>(anyMsg.release())));
 
-            if(pMsg->m_sourceID.value() == m_ID) {
-                spdlog::critical("MPI({}): Received {} message from itself!", m_ID, pMsg->typeToString());
-
-                throw std::logic_error("MPI: Cannot receive scatter message from itself!");
-            }
-
             spdlog::trace("MPI({}): Enqueueing {} message from node #{}", m_ID, pMsg->typeToString(), pMsg->m_sourceID.value());
 
             {
@@ -154,12 +168,6 @@ void MPI::tick()
         }
         case Messages::e_Type::Gather: {
             auto pMsg = std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather *>(anyMsg.release())));
-
-            if(pMsg->m_destinationID.value() != m_ID) {
-                spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, pMsg->typeToString(), pMsg->m_destinationID.value());
-
-                throw std::logic_error("MPI: Invalid destination ID!");
-            }
 
             spdlog::trace("MPI({}): Enqueueing {} message..", m_ID, pMsg->typeToString());
 
@@ -536,7 +544,8 @@ void MPI::barrier()
 {
     spdlog::trace("MPI({}): Barrier", m_ID);
 
-        std::unique_lock lock(m_barrier.mutex);
+    if(Network::Switches::isNetworkComputingEnabled()) {
+        std::unique_lock lock(m_barrierRelease.mutex);
 
         // Send barrier request message
         {
@@ -546,7 +555,265 @@ void MPI::barrier()
         }
 
         // Wait for the barrier to be released
-        m_barrier.notifier.wait(lock);
+        m_barrierRelease.notifier.wait(lock);
+    }
+    else {
+        static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
+        static const std::size_t compNodePerColumn = Network::Constants::getPortPerSwitch() / 2;
+        static const std::size_t compNodePerGroup  = compNodePerColumn * compNodePerColumn;
+        static const std::size_t compNodePerHalf   = compNodeAmount / 2;
+
+        std::unique_lock relLock(m_barrierRelease.mutex);
+
+        // The first computing node will always be the root node for barrier requests
+        if(0 == m_ID) {
+            std::unique_lock reqLock(m_barrierRequest.mutex);
+
+            // Wait for barrier request from all other nodes
+            std::vector<bool> barrierReqs(compNodeAmount, false);
+            barrierReqs.at(m_ID) = true; // Skip the root node
+
+            {
+                std::erase_if(m_barrierRequest.messages, [&](auto &&msg) {
+                    if(barrierReqs.at(msg->m_sourceID.value())) {
+                        spdlog::critical("MPI({}): Received duplicate barrier request from node #{}", m_ID, msg->m_sourceID.value());
+
+                        throw std::logic_error("MPI: Duplicate barrier request!");
+                    }
+
+                    spdlog::trace("MPI({}): Received barrier request from node #{}", m_ID, msg->m_sourceID.value());
+                    barrierReqs.at(msg->m_sourceID.value()) = true;
+
+                    return true;
+                });
+            }
+
+            while(!std::all_of(barrierReqs.cbegin(), barrierReqs.cend(), [](const bool req) { return req; })) {
+                spdlog::trace("MPI({}): Waiting for barrier requests..", m_ID);
+                m_barrierRequest.notifier.wait(reqLock, [&]() { return !m_barrierRequest.messages.empty(); });
+
+                const auto &msg = *m_barrierRequest.messages.back();
+
+                if(barrierReqs.at(msg.m_sourceID.value())) {
+                    spdlog::critical("MPI({}): Received duplicate barrier request from node #{}", m_ID, msg.m_sourceID.value());
+
+                    throw std::logic_error("MPI: Duplicate barrier request!");
+                }
+
+                spdlog::trace("MPI({}): Received barrier request from node #{}", m_ID, msg.m_sourceID.value());
+                barrierReqs.at(msg.m_sourceID.value()) = true;
+                m_barrierRequest.messages.pop_back();
+            }
+        }
+        else {
+            // Send barrier request to the first node
+            spdlog::trace("MPI({}): Sending barrier request to node #0", m_ID);
+
+            auto msg = std::make_unique<Messages::BarrierRequest>(m_ID, 0);
+            m_port.pushOutgoing(std::move(msg));
+        }
+
+        if(0 == m_ID) {
+            // Send barrier release to all nodes in the same column
+            for(std::size_t m_targetID = 1; m_targetID < compNodePerColumn; ++m_targetID) {
+                spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, m_targetID);
+
+                auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, m_targetID);
+                m_port.pushOutgoing(std::move(msg));
+            }
+        }
+        else if(m_ID < compNodePerColumn) {
+            // Wait for barrier release from the first node
+            bool bReleased = false;
+            if(!m_barrierRelease.messages.empty()) {
+                auto alreadyReceivedRelease = std::find_if(m_barrierRelease.messages.begin(), m_barrierRelease.messages.end(), [](auto &&msg) {
+                    return (msg->m_sourceID.value() == 0);
+                });
+
+                if(alreadyReceivedRelease != m_barrierRelease.messages.cend()) {
+                    spdlog::trace("MPI({}): Received barrier release from node #0", m_ID);
+
+                    m_barrierRelease.messages.erase(alreadyReceivedRelease);
+
+                    bReleased = true;
+                }
+            }
+
+            while(!bReleased) {
+                m_barrierRelease.notifier.wait(relLock, [&]() { return !m_barrierRelease.messages.empty(); });
+
+                auto &msg = *m_barrierRelease.messages.back();
+
+                if(msg.m_sourceID.value() != 0) {
+                    spdlog::warn("MPI({}): Received barrier release from another source({}), expected node #0", m_ID, msg.m_sourceID.value());
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received barrier release from node #0", m_ID);
+                bReleased = true;
+
+                m_barrierRelease.messages.pop_back();
+
+                break;
+            }
+        }
+        else {
+            // Nothing to do
+        }
+
+        if(m_ID < compNodePerColumn) {
+            // Send barrier release to all same in-column-offset nodes in the same group
+            static const auto columnPerGroup = compNodePerGroup / compNodePerColumn;
+
+            for(std::size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
+                const auto targetID = m_ID + (columnID * compNodePerColumn);
+
+                spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
+
+                auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
+                m_port.pushOutgoing(std::move(msg));
+            }
+        }
+        else if(m_ID < compNodePerGroup) {
+            // Wait for barrier release from the same in-column-offset node in the first column
+            bool bReleased = false;
+            if(!m_barrierRelease.messages.empty()) {
+                auto alreadyReceivedRelease = std::find_if(m_barrierRelease.messages.begin(), m_barrierRelease.messages.end(), [&](auto &&msg) {
+                    return (msg->m_sourceID.value() == (m_ID % compNodePerColumn));
+                });
+
+                if(alreadyReceivedRelease != m_barrierRelease.messages.cend()) {
+                    spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, alreadyReceivedRelease->get()->m_sourceID.value());
+
+                    m_barrierRelease.messages.erase(alreadyReceivedRelease);
+
+                    bReleased = true;
+                }
+            }
+
+            while(!bReleased) {
+                m_barrierRelease.notifier.wait(relLock, [&]() { return !m_barrierRelease.messages.empty(); });
+
+                auto &msg = *m_barrierRelease.messages.back();
+
+                if(msg.m_sourceID.value() != (m_ID % compNodePerColumn)) {
+                    spdlog::warn("MPI({}): Received barrier release from another source({}), expected node #{}", m_ID, msg.m_sourceID.value(), (m_ID % compNodePerColumn));
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, msg.m_sourceID.value());
+                bReleased = true;
+
+                m_barrierRelease.messages.pop_back();
+
+                break;
+            }
+        }
+        else {
+            // Nothing to do
+        }
+
+        if(m_ID < compNodePerGroup) {
+            // Send barrier release to all same in-group-offset nodes in the other groups of the left half
+            static const auto groupPerHalf = compNodePerHalf / compNodePerGroup;
+
+            for(std::size_t groupID = 1; groupID < groupPerHalf; ++groupID) {
+                const auto targetID = m_ID + (groupID * compNodePerGroup);
+                spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
+
+                auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
+
+                m_port.pushOutgoing(std::move(msg));
+            }
+        }
+        else if(m_ID < compNodePerHalf) {
+            // Wait for barrier release from the same in-group-offset node in the first group
+            bool bReleased = false;
+            if(!m_barrierRelease.messages.empty()) {
+                auto alreadyReceivedRelease = std::find_if(m_barrierRelease.messages.begin(), m_barrierRelease.messages.end(), [&](auto &&msg) {
+                    return (msg->m_sourceID.value() == (m_ID % compNodePerGroup));
+                });
+
+                if(alreadyReceivedRelease != m_barrierRelease.messages.cend()) {
+                    spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, alreadyReceivedRelease->get()->m_sourceID.value());
+
+                    m_barrierRelease.messages.erase(alreadyReceivedRelease);
+
+                    bReleased = true;
+                }
+            }
+
+            while(!bReleased) {
+                m_barrierRelease.notifier.wait(relLock, [&]() { return !m_barrierRelease.messages.empty(); });
+
+                auto &msg = *m_barrierRelease.messages.back();
+
+                if(msg.m_sourceID.value() != (m_ID % compNodePerGroup)) {
+                    spdlog::warn("MPI({}): Received barrier release from another source({}), expected node #{}", m_ID, msg.m_sourceID.value(), (m_ID % compNodePerGroup));
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, msg.m_sourceID.value());
+                bReleased = true;
+
+                m_barrierRelease.messages.pop_back();
+
+                break;
+            }
+        }
+        else {
+            // Nothing to do
+        }
+
+        if(m_ID < compNodePerHalf) {
+            // Send barrier release to the same in-half-offset node in the right half
+            const auto targetID = m_ID + compNodePerHalf;
+            spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
+
+            auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
+
+            m_port.pushOutgoing(std::move(msg));
+        }
+        else {
+            // Wait for a barrier release from the same in-half-offset node in the left half
+            bool bReleased = false;
+            if(!m_barrierRelease.messages.empty()) {
+                auto alreadyReceivedRelease = std::find_if(m_barrierRelease.messages.begin(), m_barrierRelease.messages.end(), [&](auto &&msg) {
+                    return (msg->m_sourceID.value() == (m_ID - compNodePerHalf));
+                });
+
+                if(alreadyReceivedRelease != m_barrierRelease.messages.cend()) {
+                    spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, alreadyReceivedRelease->get()->m_sourceID.value());
+
+                    m_barrierRelease.messages.erase(alreadyReceivedRelease);
+
+                    bReleased = true;
+                }
+            }
+
+            while(!bReleased) {
+                m_barrierRelease.notifier.wait(relLock, [&]() { return !m_barrierRelease.messages.empty(); });
+
+                auto &msg = *m_barrierRelease.messages.back();
+
+                if(msg.m_sourceID.value() != (m_ID - compNodePerHalf)) {
+                    spdlog::warn("MPI({}): Received barrier release from another source({}), expected node #{}", m_ID, msg.m_sourceID.value(), (m_ID - compNodePerHalf));
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received barrier release from node #{}", m_ID, msg.m_sourceID.value());
+                bReleased = true;
+
+                m_barrierRelease.messages.pop_back();
+
+                break;
+            }
+        }
+    }
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
 }
