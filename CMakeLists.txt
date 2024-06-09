@@ -17,7 +17,7 @@ set(SOURCES
     source/Computer.cpp
     source/Network/MPI.cpp
     source/Network/Message.cpp
-    source/Network/Derivations.hpp
+    source/Network/Constants.cpp
 )
 
 set(HEADERS
@@ -31,6 +31,7 @@ set(HEADERS
     source/Computer.hpp
     source/Network/MPI.hpp
     source/Network/Message.hpp
+    source/Network/Constants.hpp
 )
 
 find_package(spdlog REQUIRED)

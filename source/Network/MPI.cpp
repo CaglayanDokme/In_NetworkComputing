@@ -9,7 +9,7 @@
 
 #include "Network/Switches/ISwitch.hpp"
 #include "spdlog/spdlog.h"
-#include "Derivations.hpp"
+#include "Constants.hpp"
 #include <map>
 
 using namespace Network;
@@ -374,7 +374,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("MPI cannot send empty message!");
         }
 
-        static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
+        static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
 
         // Broadcast message
         if(Network::Switches::isNetworkComputingEnabled()) {
@@ -536,17 +536,17 @@ void MPI::barrier()
 {
     spdlog::trace("MPI({}): Barrier", m_ID);
 
-    std::unique_lock lock(m_barrier.mutex);
+        std::unique_lock lock(m_barrier.mutex);
 
-    // Send barrier request message
-    {
-        auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
+        // Send barrier request message
+        {
+            auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
 
-        m_port.pushOutgoing(std::move(msg));
-    }
+            m_port.pushOutgoing(std::move(msg));
+        }
 
-    // Wait for the barrier to be released
-    m_barrier.notifier.wait(lock);
+        // Wait for the barrier to be released
+        m_barrier.notifier.wait(lock);
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
 }
@@ -729,7 +729,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
             throw std::invalid_argument("MPI cannot scatter empty data!");
         }
 
-        const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
+        const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
 
         if(0 != (data.size() % compNodeAmount)) {
             spdlog::critical("MPI({}): Data size({}) is not divisible by the computing node amount({})!", m_ID, data.size(), compNodeAmount);
@@ -823,13 +823,13 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
 
                 auto &msg = *msgIterator->get();
 
-                if((msg.m_data.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
-                    spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
+                if((msg.m_data.size() % (Network::Constants::deriveComputingNodeAmount() - 1)) != 0) {
+                    spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Constants::deriveComputingNodeAmount() - 1);
 
                     throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
                 }
 
-                const auto chunkSize = msg.m_data.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
+                const auto chunkSize = msg.m_data.size() / (Network::Constants::deriveComputingNodeAmount() - 1);
                 spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
 
                 if(data.size() != chunkSize) {
@@ -858,13 +858,13 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
                 continue;
             }
 
-            if((msg.m_data.size() % (Network::Utilities::deriveComputingNodeAmount() - 1)) != 0) {
-                spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Utilities::deriveComputingNodeAmount() - 1);
+            if((msg.m_data.size() % (Network::Constants::deriveComputingNodeAmount() - 1)) != 0) {
+                spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Constants::deriveComputingNodeAmount() - 1);
 
                 throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
             }
 
-            const auto chunkSize = msg.m_data.size() / (Network::Utilities::deriveComputingNodeAmount() - 1);
+            const auto chunkSize = msg.m_data.size() / (Network::Constants::deriveComputingNodeAmount() - 1);
             spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
 
             if(data.size() != chunkSize) {
@@ -898,7 +898,7 @@ void MPI::allGather(std::vector<float> &data)
         throw std::invalid_argument("MPI: Empty data given to all-gather!");
     }
 
-    const auto expectedSize = data.size() * Network::Utilities::deriveComputingNodeAmount();
+    const auto expectedSize = data.size() * Network::Constants::deriveComputingNodeAmount();
 
     // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
     std::unique_lock lock(m_allGather.mutex);

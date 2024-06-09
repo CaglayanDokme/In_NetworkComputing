@@ -1,4 +1,4 @@
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 #include "spdlog/spdlog.h"
 #include "Core.hpp"
 
@@ -14,7 +14,7 @@ Core::Core(const std::size_t portAmount)
     }
 
     // Initialize barrier requests
-    for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx) {
+    for(std::size_t compNodeIdx = 0; compNodeIdx < Constants::deriveComputingNodeAmount(); ++compNodeIdx) {
         m_barrierRequestFlags.insert({compNodeIdx, false});
     }
 

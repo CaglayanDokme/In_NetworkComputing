@@ -1,7 +1,7 @@
 #include "Aggregate.hpp"
 #include "spdlog/spdlog.h"
 #include "Network/Message.hpp"
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 
 using namespace Network::Switches;
 
@@ -620,7 +620,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
-    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+    static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
     static const auto downPortAmount = getDownPortAmount();
 
     spdlog::trace("Aggregate Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);

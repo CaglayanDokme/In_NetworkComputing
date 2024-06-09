@@ -1,7 +1,7 @@
 #include <numeric>
 #include "Edge.hpp"
 #include "spdlog/spdlog.h"
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 #include "InterSwitchMessages.hpp"
 
 using namespace Network::Switches;
@@ -122,7 +122,7 @@ Edge::Edge(const std::size_t portAmount)
 
         // To-down
         {
-            m_gatherStates.toDown.value.resize(Utilities::deriveComputingNodeAmount());
+            m_gatherStates.toDown.value.resize(Constants::deriveComputingNodeAmount());
         }
 
         if(m_gatherStates.toUp.value.size() != getDownPortAmount()) {
@@ -131,7 +131,7 @@ Edge::Edge(const std::size_t portAmount)
             throw std::runtime_error("Invalid mapping!");
         }
 
-        if(m_gatherStates.toDown.value.size() != Utilities::deriveComputingNodeAmount()) {
+        if(m_gatherStates.toDown.value.size() != Constants::deriveComputingNodeAmount()) {
             spdlog::critical("Edge Switch({}): Amount of to-down gather requests is not equal to computing node amount!", m_ID);
 
             throw std::runtime_error("Invalid mapping!");
@@ -733,7 +733,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
         throw std::runtime_error("Edge Switch: Scatter message received from an up-port!");
     }
 
-    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+    static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
 
     if(m_downPortTable.at(msg->m_sourceID.value()) != getPort(sourcePortIdx)) {
         spdlog::critical("Edge Switch({}): Source ID({}) and source port index({}) didn't match in scatter message!", m_ID, msg->m_sourceID.value(), sourcePortIdx);
@@ -879,7 +879,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
 
                 // Reset state
                 state.bOngoing = false;
-                state.destinationID = Utilities::deriveComputingNodeAmount();
+                state.destinationID = Constants::deriveComputingNodeAmount();
             }
         }
         else {
@@ -1139,7 +1139,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
 
             const size_t refDataSize = state.value.at(0).second.size();
             decltype(Messages::Gather::m_data) mergedData;
-            for(size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(); ++compNodeIdx) {
+            for(size_t compNodeIdx = 0; compNodeIdx < Constants::deriveComputingNodeAmount(); ++compNodeIdx) {
                 const auto dataPair = std::find_if(state.value.cbegin(), state.value.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
 
                 if(state.value.cend() == dataPair) {
@@ -1249,8 +1249,8 @@ std::size_t Edge::getUpPortAmount() const
 
 bool Edge::GatherState::ToDown::push(const std::size_t compNodeIdx, const std::size_t destID, decltype(Messages::Gather::m_data) &&data)
 {
-    if(value.size() != Utilities::deriveComputingNodeAmount()) {
-        spdlog::critical("Edge: Gather state value size is corrupted! Expected size {}, detected {}", Utilities::deriveComputingNodeAmount(), value.size());
+    if(value.size() != Constants::deriveComputingNodeAmount()) {
+        spdlog::critical("Edge: Gather state value size is corrupted! Expected size {}, detected {}", Constants::deriveComputingNodeAmount(), value.size());
 
         throw std::runtime_error("Edge: Gather state value size is corrupted!");
     }
@@ -1305,9 +1305,17 @@ bool Edge::GatherState::ToDown::push(const std::size_t compNodeIdx, const std::s
 void Edge::GatherState::ToDown::reset()
 {
     bOngoing = false;
-    destinationID = Utilities::deriveComputingNodeAmount();
+    destinationID = Constants::deriveComputingNodeAmount();
 
     for(auto &entry : value) {
         entry.clear();
     }
 }
+
+// EUROsimA
+// Quick sort with load balancing
+// subgroup comm. (ilk oncelik bunda)
+    // https://www.mpich.org/static/docs/v3.1/www3/MPI_Comm_split.html
+// Parallel prefix-sum
+    // Hocada sekiller var, iste
+// Bildiri yapılmalı mı?
