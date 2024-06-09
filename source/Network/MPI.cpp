@@ -7,6 +7,7 @@
 
 #include "MPI.hpp"
 
+#include "Network/Switches/ISwitch.hpp"
 #include "spdlog/spdlog.h"
 #include "Derivations.hpp"
 #include <map>
@@ -373,19 +374,33 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("MPI cannot send empty message!");
         }
 
+        static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
+
         // Broadcast message
-        {
+        if(Network::Switches::isNetworkComputingEnabled()) {
             auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
             msg->m_data = data;
 
             m_port.pushOutgoing(std::move(msg));
+        }
+        else {
+            // Send the broadcast message to all computing nodes
+            for(std::size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
+                if(m_targetID == m_ID) {
+                    continue;
+                }
+
+                auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID, m_targetID);
+                msg->m_data = data;
+
+                m_port.pushOutgoing(std::move(msg));
+            }
         }
 
         // Wait for acknowledgements
         {
             std::unique_lock lock(m_acknowledge.mutex);
 
-            const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount();
             std::vector<bool> acks(compNodeAmount, false);
             acks.at(m_ID) = true; // Skip the broadcaster
 
@@ -401,7 +416,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                         throw std::logic_error("MPI: Duplicate acknowledgement!");
                     }
 
-                    spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg->typeToString(), msg->m_sourceID.value());
+                    spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
                     acks.at(msg->m_sourceID.value()) = true;
 
                     return true;
@@ -410,7 +425,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
             while(!std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
                 spdlog::trace("MPI({}): Waiting for broadcast acknowledgements..", m_ID);
-                m_acknowledge.notifier.wait(lock);
+                m_acknowledge.notifier.wait(lock, [&]() { return !m_acknowledge.messages.empty(); });
 
                 const auto &msg = *m_acknowledge.messages.back();
 
@@ -426,8 +441,9 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                     throw std::logic_error("MPI: Duplicate acknowledgement!");
                 }
 
-                spdlog::trace("MPI({}): Received {} acknowledgement from node #{}", m_ID, msg.typeToString(), msg.m_sourceID.value());
+                spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
                 acks.at(msg.m_sourceID.value()) = true;
+                m_acknowledge.messages.pop_back();
             }
 
             spdlog::trace("MPI({}): Received all acknowledgements", m_ID);
@@ -445,7 +461,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         std::unique_lock lock(m_broadcastReceive.mutex);
 
         // Check the already queued messages
-        {
+        const auto bAlreadyReceived = [&]() -> bool {
             auto msgIterator = std::find_if(m_broadcastReceive.messages.begin(), m_broadcastReceive.messages.end(), [sourceID](auto &&msg) {
                 return (msg->m_sourceID.value() == sourceID);
             });
@@ -458,18 +474,20 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                 data = std::move(msg.m_data);
                 m_broadcastReceive.messages.erase(msgIterator);
 
-                return;
+                return true;
             }
-        }
+
+            return false;
+        }();
 
         // Wait for broadcast message
-        while(true) {
+        while(!bAlreadyReceived) {
             m_broadcastReceive.notifier.wait(lock);
 
             auto &msg = *m_broadcastReceive.messages.back();
 
             if(msg.m_sourceID.value() != sourceID) {
-                spdlog::warn("MPI({}): Received {} message from another source({}), expected note #{}", m_ID, msg.typeToString(), msg.m_sourceID.value(), sourceID);
+                spdlog::warn("MPI({}): Received {} message from another source({}), expected node #{}", m_ID, msg.typeToString(), msg.m_sourceID.value(), sourceID);
 
                 continue;
             }
@@ -478,6 +496,8 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
             data = std::move(msg.m_data);
             m_broadcastReceive.messages.pop_back();
+
+            break;
         }
 
         // Send an acknowledgement
