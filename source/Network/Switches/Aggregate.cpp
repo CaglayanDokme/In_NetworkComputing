@@ -24,9 +24,17 @@ Aggregate::Aggregate(const std::size_t portAmount)
         }
     }
 
-    // Initialize barrier release flags
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        m_barrierReleaseFlags.insert({upPortIdx, false});
+    // Initialize barrier flags
+    {
+        // Request flags
+        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            m_barrierRequestFlags.insert({downPortIdx, false});
+        }
+
+        // Release flags
+        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            m_barrierReleaseFlags.insert({upPortIdx, false});
+        }
     }
 
     // Initialize reduce requests
@@ -288,6 +296,12 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
 {
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
     if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
         spdlog::critical("Aggregate Switch({}): Barrier request received from an up-port!", m_ID);
         spdlog::debug("Aggregate Switch({}): Source ID was #{}!", m_ID, msg->m_sourceID.value());
@@ -295,10 +309,29 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         throw std::runtime_error("Barrier request in wrong direction!");
     }
 
-    // Re-direct to all up-ports
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        auto uniqueMsg = std::make_unique<Network::Messages::BarrierRequest>(*msg);
-        getUpPort(upPortIdx).pushOutgoing(std::move(uniqueMsg));
+    // Save into flags
+    {
+        const auto downPortIdx = sourcePortIdx - getUpPortAmount();
+
+        if(m_barrierRequestFlags.at(downPortIdx)) {
+            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
+        }
+        else {
+            m_barrierRequestFlags.at(downPortIdx) = true;
+        }
+    }
+
+    // Check for re-transmission to up-ports
+    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto& entry) { return entry.second; })) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            getUpPort(upPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRequest>()));
+        }
+
+        for(auto &entry : m_barrierRequestFlags) {
+            entry.second = false;
+        }
     }
 }
 

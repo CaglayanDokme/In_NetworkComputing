@@ -21,9 +21,17 @@ Edge::Edge(const std::size_t portAmount)
         }
     }
 
-    // Initialize barrier release flags
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        m_barrierReleaseFlags.insert({upPortIdx, false});
+    // Initialize barrier flags
+    {
+        // Request flags
+        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            m_barrierRequestFlags.insert({downPortIdx, false});
+        }
+
+        // Release flags
+        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            m_barrierReleaseFlags.insert({upPortIdx, false});
+        }
     }
 
     // Initialize reduce requests
@@ -361,10 +369,29 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
         throw std::runtime_error("Barrier request in wrong direction!");
     }
 
-    // Re-direct to all up-ports
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        auto uniqueMsg = std::make_unique<Network::Messages::BarrierRequest>(*msg);
-        getUpPort(upPortIdx).pushOutgoing(std::move(uniqueMsg));
+    // Save into flags
+    {
+        const auto downPortIdx = sourcePortIdx - getUpPortAmount();
+
+        if(m_barrierRequestFlags.at(downPortIdx)) {
+            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
+        }
+        else {
+            m_barrierRequestFlags.at(downPortIdx) = true;
+        }
+    }
+
+    // Check for re-transmission to up-ports
+    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto& entry) { return entry.second; })) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            getUpPort(upPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRequest>()));
+        }
+
+        for(auto &entry : m_barrierRequestFlags) {
+            entry.second = false;
+        }
     }
 }
 
@@ -389,17 +416,13 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
     }
 
     // Check for barrier release
-    {
-        if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
-            // Send barrier release to all down-ports
-            for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
-            }
+    if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
+        }
 
-            // Reset all flags
-            for(auto &entry : m_barrierReleaseFlags) {
-                entry.second = false;
-            }
+        for(auto &entry : m_barrierReleaseFlags) {
+            entry.second = false;
         }
     }
 }

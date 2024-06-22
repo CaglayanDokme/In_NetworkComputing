@@ -14,8 +14,8 @@ Core::Core(const std::size_t portAmount)
     }
 
     // Initialize barrier requests
-    for(std::size_t compNodeIdx = 0; compNodeIdx < Constants::deriveComputingNodeAmount(); ++compNodeIdx) {
-        m_barrierRequestFlags.insert({compNodeIdx, false});
+    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx) {
+        m_barrierRequestFlags.insert({sourcePortIdx, false});
     }
 
     // Initialize reduce requests
@@ -149,8 +149,10 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
 {
     // Process message
     {
-        if(auto &barrierRequest = m_barrierRequestFlags.at(msg->m_sourceID.value()); barrierRequest) {
-            spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg->m_sourceID.value());
+        if(auto &barrierRequest = m_barrierRequestFlags.at(sourcePortIdx); barrierRequest) {
+            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
         }
         else {
             barrierRequest = true;
@@ -158,19 +160,17 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 
     // Check for barrier release
-    {
-        if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
-            spdlog::trace("Core Switch({}): All computing nodes sent barrier requests, releasing the barrier..", m_ID);
+    if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
+        spdlog::trace("Core Switch({}): All computing nodes sent barrier requests, releasing the barrier..", m_ID);
 
-            // Send barrier release to all ports
-            for(auto &port: m_ports) {
-                port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());
-            }
+        // Send barrier release to all ports
+        for(auto &port: m_ports) {
+            port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());
+        }
 
-            // Reset all requests
-            for(auto &elem: m_barrierRequestFlags) {
-                elem.second = false;
-            }
+        // Reset all requests
+        for(auto &elem: m_barrierRequestFlags) {
+            elem.second = false;
         }
     }
 }

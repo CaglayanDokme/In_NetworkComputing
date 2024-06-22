@@ -40,6 +40,12 @@ BroadcastMessage::BroadcastMessage(const std::size_t sourceID, const std::size_t
     // Nothing
 }
 
+BarrierRequest::BarrierRequest()
+: BaseMessage(e_Type::BarrierRequest)
+{
+    // Nothing
+}
+
 BarrierRequest::BarrierRequest(const std::size_t sourceID)
 : BaseMessage(e_Type::BarrierRequest, sourceID)
 {

@@ -91,7 +91,7 @@ namespace Network::Messages {
 
     class BarrierRequest : public BaseMessage {
     public: /** Construction **/
-        BarrierRequest() = delete;
+        BarrierRequest();
 
         /**
          * @brief Construct a barrier request message that will be responded by in-network computing capable switches

@@ -393,6 +393,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         }
         else {
             // Send the broadcast message to all computing nodes
+            // TODO Can be optimized similar to the barrier
             for(std::size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
                 if(m_targetID == m_ID) {
                     continue;
