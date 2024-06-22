@@ -96,6 +96,12 @@ void MPI::tick()
 
             spdlog::trace("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value());
 
+            if(Network::Switches::isNetworkComputingEnabled()) {
+                spdlog::critical("MPI({}): Received barrier request in network computing mode!", m_ID);
+
+                throw std::logic_error("MPI: Barrier request in network computing mode!");
+            }
+
             {
                 std::lock_guard lock(m_barrierRequest.mutex);
                 m_barrierRequest.messages.push_back(std::move(pMsg));
@@ -556,7 +562,8 @@ void MPI::barrier()
         }
 
         // Wait for the barrier to be released
-        m_barrierRelease.notifier.wait(lock);
+        m_barrierRelease.notifier.wait(lock, [&]() { return !m_barrierRelease.messages.empty(); });
+        m_barrierRelease.messages.pop_back();
     }
     else {
         static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
