@@ -42,7 +42,9 @@ bool Core::tick()
     }
 
     // Check all ports for incoming messages
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
+    bool bMsgReceived = false;
+    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
+        const auto sourcePortIdx = m_nextPort;
         auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
@@ -50,6 +52,7 @@ bool Core::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+        bMsgReceived = true;
 
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 

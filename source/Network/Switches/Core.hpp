@@ -47,6 +47,7 @@ namespace Network::Switches {
         void redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg);
 
     private: /** Members **/
+        std::size_t m_nextPort{0};
         std::map<std::size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False
 
         struct {

@@ -140,8 +140,9 @@ bool Aggregate::tick()
 
     // Check all ports for incoming messages
     // TODO Should we process one message for each port at every tick?
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
-        const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
+    bool bMsgReceived = false;
+    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
+        const auto sourcePortIdx = m_nextPort;
         auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
@@ -149,6 +150,7 @@ bool Aggregate::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+        bMsgReceived = true;
 
         spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 

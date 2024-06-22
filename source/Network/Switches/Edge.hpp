@@ -82,6 +82,7 @@ namespace Network::Switches {
 
     private: /** Members **/
         const std::size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
+        std::size_t m_nextPort{0};
         std::map<std::size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
         std::map<std::size_t, bool> m_barrierRequestFlags;  // Key: Down-port index, Value: True/False
         std::map<std::size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
