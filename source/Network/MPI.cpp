@@ -32,6 +32,8 @@ void MPI::tick()
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
+    ++m_statistics.totalReceivedMessages;
+
     if(anyMsg->m_destinationID.has_value()) {
         if(anyMsg->m_destinationID.value() != m_ID) {
             spdlog::critical("MPI({}): Received {} message for another destination({})!", m_ID, anyMsg->typeToString(), anyMsg->m_destinationID.value());
@@ -231,7 +233,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
         msg->m_data = data;
 
         // Push the message to the port
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
     }
 
     // Wait for the acknowledgement
@@ -357,7 +359,7 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
     // Send an acknowledgement
     {
         auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::DirectMessage);
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
 
         spdlog::trace("MPI({}): Sent {} acknowledgement to {}", m_ID, Messages::toString(Messages::e_Type::DirectMessage), sourceID);
     }
@@ -395,7 +397,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
             msg->m_data = data;
 
-            m_port.pushOutgoing(std::move(msg));
+            send(std::move(msg));
         }
         else {
             // Send the broadcast message to all computing nodes
@@ -408,7 +410,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                 auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID, m_targetID);
                 msg->m_data = data;
 
-                m_port.pushOutgoing(std::move(msg));
+                send(std::move(msg));
             }
         }
 
@@ -518,7 +520,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         // Send an acknowledgement
         {
             auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
-            m_port.pushOutgoing(std::move(msg));
+            send(std::move(msg));
 
             spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
@@ -558,7 +560,7 @@ void MPI::barrier()
         {
             auto msg = std::make_unique<Messages::BarrierRequest>(m_ID);
 
-            m_port.pushOutgoing(std::move(msg));
+            send(std::move(msg));
         }
 
         // Wait for the barrier to be released
@@ -618,7 +620,7 @@ void MPI::barrier()
             spdlog::trace("MPI({}): Sending barrier request to node #0", m_ID);
 
             auto msg = std::make_unique<Messages::BarrierRequest>(m_ID, 0);
-            m_port.pushOutgoing(std::move(msg));
+            send(std::move(msg));
         }
 
         if(0 == m_ID) {
@@ -627,7 +629,7 @@ void MPI::barrier()
                 spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, m_targetID);
 
                 auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, m_targetID);
-                m_port.pushOutgoing(std::move(msg));
+                send(std::move(msg));
             }
         }
         else if(m_ID < compNodePerColumn) {
@@ -680,7 +682,7 @@ void MPI::barrier()
                 spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
 
                 auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
-                m_port.pushOutgoing(std::move(msg));
+                send(std::move(msg));
             }
         }
         else if(m_ID < compNodePerGroup) {
@@ -733,7 +735,7 @@ void MPI::barrier()
 
                 auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
 
-                m_port.pushOutgoing(std::move(msg));
+                send(std::move(msg));
             }
         }
         else if(m_ID < compNodePerHalf) {
@@ -783,7 +785,7 @@ void MPI::barrier()
 
             auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, targetID);
 
-            m_port.pushOutgoing(std::move(msg));
+            send(std::move(msg));
         }
         else {
             // Wait for a barrier release from the same in-half-offset node in the left half
@@ -912,7 +914,7 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
         msg->m_data = data;
 
         // Push the message to the port
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
     }
 }
 
@@ -945,7 +947,7 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         auto msg = std::make_unique<Messages::ReduceAll>(operation);
         msg->m_data = std::move(data);
 
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
     }
 
     // Wait for the message
@@ -1020,7 +1022,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         auto msg = std::make_unique<Messages::Scatter>(m_ID);
         msg->m_data = std::move(data);
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
 
         data = std::move(localChunk);
     }
@@ -1159,7 +1161,7 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
         auto msg = std::make_unique<Messages::Gather>(destinationID);
         msg->m_data = data;
 
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
     }
 }
 
@@ -1184,7 +1186,7 @@ void MPI::allGather(std::vector<float> &data)
 
         msg->m_data = std::move(data);
 
-        m_port.pushOutgoing(std::move(msg));
+        send(std::move(msg));
     }
 
     // Wait for the message
@@ -1206,4 +1208,10 @@ void MPI::allGather(std::vector<float> &data)
 
         break;
     }
+}
+
+void MPI::send(Network::Port::UniqueMsg msg)
+{
+    m_port.pushOutgoing(std::move(msg));
+    ++m_statistics.totalSentMessages;
 }

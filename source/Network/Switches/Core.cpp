@@ -52,7 +52,9 @@ bool Core::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+
         bMsgReceived = true;
+        ++m_statistics.totalProcessedMessages;
 
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 

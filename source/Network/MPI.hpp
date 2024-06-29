@@ -31,6 +31,12 @@ namespace Network {
     public: /** Aliases **/
         using ReduceOp = Messages::ReduceOperation;
 
+    public: /** Struct Declarations **/
+        struct Statistics {
+            size_t totalSentMessages;
+            size_t totalReceivedMessages;
+        };
+
     public: /** Construction **/
         MPI(const std::size_t ID);
 
@@ -44,6 +50,12 @@ namespace Network {
 
     public: /** Methods **/
         void tick();
+
+        /**
+         * @brief  Get the statistics of the message passing interface
+         * @return Object containing the statistics
+         */
+        [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
 
         /**
          * @brief  Get the port of the computing node
@@ -169,8 +181,12 @@ namespace Network {
          */
         void allGather(std::vector<float> &data);
 
+    private:
+        void send(Network::Port::UniqueMsg msg);
+
     private: /** Members **/
         const std::size_t m_ID;
+        Statistics m_statistics;
         Port m_port;
 
         StateHolder<Messages::Acknowledge> m_acknowledge;
