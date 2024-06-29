@@ -96,7 +96,7 @@ void MPI::tick()
         case Messages::e_Type::BarrierRequest: {
             auto pMsg = std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest *>(anyMsg.release())));
 
-            spdlog::info("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value()); // TODO Trace
+            spdlog::trace("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value());
 
             if(Network::Switches::isNetworkComputingEnabled()) {
                 spdlog::critical("MPI({}): Received barrier request in network computing mode!", m_ID);
@@ -642,6 +642,14 @@ void MPI::barrier()
                 });
 
                 if(pRequestPair == bRequestMap.end()) {
+                    spdlog::debug("MPI({}): Couldn't find a request pair for source {}", m_ID, msg->m_sourceID.value());
+
+                    return false;
+                }
+
+                if(pRequestPair->second) {
+                    spdlog::debug("MPI({}): Received duplicate barrier request from node #{}, omitting..", m_ID, msg->m_sourceID.value());
+
                     return false;
                 }
 
@@ -652,6 +660,11 @@ void MPI::barrier()
             });
 
             size_t omittedMsgAmount = m_barrierRequest.messages.size();
+
+            if(omittedMsgAmount > 0) {
+                spdlog::debug("MPI({}) at line {}: Omitted {} messages..", m_ID, __LINE__, omittedMsgAmount);
+            }
+
             while(true) {
                 if(std::all_of(bRequestMap.cbegin(), bRequestMap.cend(), [](const auto &bRequested) { return bRequested.second; })) {
                     break;
@@ -684,7 +697,7 @@ void MPI::barrier()
                 spdlog::trace("MPI({}): Received barrier request from node #{}", m_ID, msg.m_sourceID.value());
                 pRequestPair->second = true;
 
-                m_barrierRequest.messages.pop_back();
+                m_barrierRequest.messages.erase(m_barrierRequest.messages.begin() + omittedMsgAmount);
             }
         }
         else if((compNodePerGroup <= m_ID) && (m_ID < compNodePerHalf)) {
@@ -715,6 +728,8 @@ void MPI::barrier()
                 });
 
                 if(pRequestPair == bRequestMap.end()) {
+                    spdlog::debug("MPI({}): Couldn't find a request pair for source {}", m_ID, msg->m_sourceID.value());
+
                     return false;
                 }
 
@@ -731,6 +746,10 @@ void MPI::barrier()
             });
 
             size_t omittedMsgAmount = m_barrierRequest.messages.size();
+
+            if(omittedMsgAmount > 0) {
+                spdlog::debug("MPI({}) at line {}: Omitted {} messages..", m_ID, __LINE__, omittedMsgAmount);
+            }
 
             while(true) {
                 if(std::all_of(bRequestMap.cbegin(), bRequestMap.cend(), [](const auto &bRequested) { return bRequested.second; })) {
@@ -764,7 +783,7 @@ void MPI::barrier()
                 spdlog::trace("MPI({}): Received barrier request from node #{}", m_ID, msg.m_sourceID.value());
                 pRequestPair->second = true;
 
-                m_barrierRequest.messages.pop_back();
+                m_barrierRequest.messages.erase(m_barrierRequest.messages.begin() + omittedMsgAmount);
             }
         }
         else if((compNodePerColumn <= m_ID) && (m_ID < compNodePerGroup)) {
@@ -792,7 +811,10 @@ void MPI::barrier()
                     return (msg->m_sourceID.value() == bRequested.first);
                 });
 
+
                 if(pRequestPair == bRequestMap.end()) {
+                    spdlog::debug("MPI({}): Couldn't find a request pair for source {}", m_ID, msg->m_sourceID.value());
+
                     return false;
                 }
 
@@ -809,6 +831,10 @@ void MPI::barrier()
             });
 
             size_t omittedMsgAmount = m_barrierRequest.messages.size();
+
+            if(omittedMsgAmount > 0) {
+                spdlog::debug("MPI({}) at line {}: Omitted {} messages..", m_ID, __LINE__, omittedMsgAmount);
+            }
 
             while(true) {
                 if(std::all_of(bRequestMap.cbegin(), bRequestMap.cend(), [](const auto &bRequested) { return bRequested.second; })) {
@@ -842,7 +868,7 @@ void MPI::barrier()
                 spdlog::trace("MPI({}): Received barrier request from node #{}", m_ID, msg.m_sourceID.value());
                 pRequestPair->second = true;
 
-                m_barrierRequest.messages.pop_back();
+                m_barrierRequest.messages.erase(m_barrierRequest.messages.begin() + omittedMsgAmount);
             }
         }
         else if(m_ID < compNodePerColumn) {
