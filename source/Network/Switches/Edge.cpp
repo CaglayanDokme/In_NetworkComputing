@@ -181,7 +181,9 @@ bool Edge::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+
         bMsgReceived = true;
+        ++m_statistics.totalProcessedMessages;
 
         spdlog::trace("Edge Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 

@@ -17,6 +17,11 @@ namespace Network::Switches {
     [[nodiscard]] bool isNetworkComputingEnabled();
 
     class ISwitch {
+    public: /** Struct Declarations **/
+        struct Statistics {
+            size_t totalProcessedMessages;
+        };
+
     protected: /** Construction **/
         /**
          * @brief Construct a base switch object
@@ -67,9 +72,16 @@ namespace Network::Switches {
          */
         [[nodiscard]] bool canCompute() const;
 
+        /**
+         * @brief  Get the statistics of the switch
+         * @return Object containing the statistics of the switch
+         */
+        [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
+
     protected: /** Members **/
         const size_t m_ID;
         const std::size_t m_portAmount;
+        Statistics m_statistics;
         std::vector<Port> m_ports;
     };
 }

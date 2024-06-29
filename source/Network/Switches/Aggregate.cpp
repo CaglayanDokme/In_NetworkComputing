@@ -150,7 +150,9 @@ bool Aggregate::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+
         bMsgReceived = true;
+        ++m_statistics.totalProcessedMessages;
 
         spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 
