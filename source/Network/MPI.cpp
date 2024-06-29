@@ -96,7 +96,7 @@ void MPI::tick()
         case Messages::e_Type::BarrierRequest: {
             auto pMsg = std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest *>(anyMsg.release())));
 
-            spdlog::trace("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value());
+            spdlog::info("MPI({}): Enqueueing barrier request from node #{}", m_ID, pMsg->m_sourceID.value());
 
             if(Network::Switches::isNetworkComputingEnabled()) {
                 spdlog::critical("MPI({}): Received barrier request in network computing mode!", m_ID);
@@ -571,13 +571,15 @@ void MPI::barrier()
         static const std::size_t compNodeAmount    = Network::Constants::deriveComputingNodeAmount();
         static const std::size_t compNodePerColumn = Network::Constants::getPortPerSwitch() / 2;
         static const std::size_t compNodePerGroup  = compNodePerColumn * compNodePerColumn;
-        static const std::size_t groupAmount       = compNodeAmount / compNodePerGroup;
         static const std::size_t compNodePerHalf   = compNodeAmount / 2;
+        static const std::size_t groupAmount       = compNodeAmount / compNodePerGroup;
+        static const std::size_t columnAmount      = compNodeAmount / compNodePerColumn;
+        static const std::size_t columnPerGroup    = compNodePerGroup / compNodePerColumn;
+
+        std::unique_lock reqLock(m_barrierRequest.mutex);
 
         if(m_ID < compNodePerHalf) {
             // Wait for barrier request from the same in-half-offset node in the right half
-            std::unique_lock reqLock(m_barrierRequest.mutex);
-
             const auto expectedSourceID = m_ID + compNodePerHalf;
 
             bool bRequested = false;
@@ -630,7 +632,6 @@ void MPI::barrier()
                 const auto expectedSourceID = m_ID + (groupID * compNodePerGroup);
                 bool bRequested = false;
 
-                std::unique_lock reqLock(m_barrierRequest.mutex);
                 if(!m_barrierRequest.messages.empty()) {
                     auto alreadyReceivedRequest = std::find_if(m_barrierRequest.messages.begin(), m_barrierRequest.messages.end(), [&](auto &&msg) {
                         return (msg->m_sourceID.value() == expectedSourceID);
@@ -654,7 +655,17 @@ void MPI::barrier()
                     auto &msg = *m_barrierRequest.messages.at(omittedMsgAmount);
 
                     if(((msg.m_sourceID.value() % compNodePerGroup) != m_ID) || (msg.m_sourceID.value() >= compNodePerHalf)) {
-                        spdlog::error("MPI({})(Line: {}): Received barrier request from an unexpected source({})! {} message waiting, {} omitted", m_ID, __LINE__, msg.m_sourceID.value(), m_barrierRequest.messages.size(), omittedMsgAmount);
+                        spdlog::warn("MPI({})(Line: {}): Received barrier request from an unexpected source({})! {} message waiting, {} omitted", m_ID, __LINE__, msg.m_sourceID.value(), m_barrierRequest.messages.size(), omittedMsgAmount);
+
+                        if(0 != omittedMsgAmount) {
+                            std::string omittedSourceIDs;
+                            for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                                omittedSourceIDs += std::to_string( m_barrierRequest.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                            }
+
+                            spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                        }
+
                         ++omittedMsgAmount;
 
                         continue;
@@ -684,11 +695,10 @@ void MPI::barrier()
 
         if(m_ID < compNodePerColumn) {
             // Wait for barrier request from the same in-column-offset node in the other columns of the first group
-            for(std::size_t columnID = 1; columnID < compNodePerColumn; ++columnID) {
+            for(std::size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
                 const auto expectedSourceID = m_ID + (columnID * compNodePerColumn);
                 bool bRequested = false;
 
-                std::unique_lock reqLock(m_barrierRequest.mutex);
                 if(!m_barrierRequest.messages.empty()) {
                     auto alreadyReceivedRequest = std::find_if(m_barrierRequest.messages.begin(), m_barrierRequest.messages.end(), [&](auto &&msg) {
                         return (msg->m_sourceID.value() == expectedSourceID);
@@ -713,6 +723,16 @@ void MPI::barrier()
 
                     if(((msg.m_sourceID.value() % compNodePerColumn) != m_ID) || (msg.m_sourceID.value() >= compNodePerGroup)) {
                         spdlog::error("MPI({})(Line: {}): Received barrier request from an unexpected source({})! {} message waiting, {} omitted", m_ID, __LINE__, msg.m_sourceID.value(), m_barrierRequest.messages.size(), omittedMsgAmount);
+
+                        if(0 != omittedMsgAmount) {
+                            std::string omittedSourceIDs;
+                            for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                                omittedSourceIDs += std::to_string( m_barrierRequest.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                            }
+
+                            spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                        }
+
                         ++omittedMsgAmount;
 
                         continue;
@@ -740,15 +760,8 @@ void MPI::barrier()
             // Nothing to do
         }
 
-        if(0 != m_barrierRequest.messages.size()) {
-            spdlog::critical("MPI({}): {} barrier requests are pending!", m_ID, m_barrierRequest.messages.size());
-
-            throw std::runtime_error("MPI: Pending barrier requests!");
-        }
-
         if(0 == m_ID) {
             // Wait for barrier request from the same column nodes
-            std::unique_lock reqLock(m_barrierRequest.mutex);
 
             for(size_t expectedSourceID = 1; expectedSourceID < compNodePerColumn; ++expectedSourceID) {
                 bool bRequested = false;
@@ -777,6 +790,16 @@ void MPI::barrier()
 
                     if((msg.m_sourceID.value() != expectedSourceID) || (msg.m_sourceID.value() >= compNodePerColumn)) {
                         spdlog::error("MPI({})(Line: {}): Received barrier request from an unexpected source({})! {} message waiting, {} omitted", m_ID, __LINE__, msg.m_sourceID.value(), m_barrierRequest.messages.size(), omittedMsgAmount);
+
+                        if(0 != omittedMsgAmount) {
+                            std::string omittedSourceIDs;
+                            for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                                omittedSourceIDs += std::to_string( m_barrierRequest.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                            }
+
+                            spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                        }
+
                         ++omittedMsgAmount;
 
                         continue;
@@ -801,6 +824,14 @@ void MPI::barrier()
         else {
             // Nothing to do
         }
+
+        if(0 != m_barrierRequest.messages.size()) {
+            spdlog::critical("MPI({}): {} barrier requests are pending!", m_ID, m_barrierRequest.messages.size());
+
+            throw std::runtime_error("MPI: Pending barrier requests!");
+        }
+
+        spdlog::info("MPI({}): All barrier requests are completed", m_ID);
 
         // Barrier requests are completed, now release the barrier
         std::unique_lock relLock(m_barrierRelease.mutex);
@@ -856,8 +887,6 @@ void MPI::barrier()
 
         if(m_ID < compNodePerColumn) {
             // Send barrier release to all same in-column-offset nodes in the same group
-            static const auto columnPerGroup = compNodePerGroup / compNodePerColumn;
-
             for(std::size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
                 const auto targetID = m_ID + (columnID * compNodePerColumn);
 
