@@ -1083,9 +1083,29 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
         std::vector<float> localChunk;
         localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
 
-        auto msg = std::make_unique<Messages::Scatter>(m_ID);
-        msg->m_data = std::move(data);
-        send(std::move(msg));
+        if(Network::Switches::isNetworkComputingEnabled()) {
+            auto msg = std::make_unique<Messages::Scatter>(m_ID);
+            msg->m_data = std::move(data);
+            send(std::move(msg));
+        }
+        else {
+            // Send the scatter message to all computing nodes
+            // TODO Can be optimized similar to the barrier
+            for(std::size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
+                if(m_targetID == m_ID) {
+                    continue;
+                }
+
+                auto msg = std::make_unique<Messages::Scatter>(m_ID, m_targetID);
+
+                const auto pChunkBegin = data.cbegin() + (m_targetID * chunkSize);
+                const auto pChunkEnd = pChunkBegin + chunkSize;
+
+                msg->m_data.assign(pChunkBegin, pChunkEnd);
+
+                send(std::move(msg));
+            }
+        }
 
         data = std::move(localChunk);
     }
@@ -1099,16 +1119,17 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         std::unique_lock lock(m_scatter.mutex);
 
+        bool bAlreadyReceived = false;
+
         // Check the already queued messages
-        {
+        if(!m_scatter.messages.empty()) {
             auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
                 return (msg->m_sourceID.value() == sourceID);
             });
 
             if(msgIterator != m_scatter.messages.cend()) {
-                spdlog::trace("MPI({}): Received data from message..", m_ID);
-
                 auto &msg = *msgIterator->get();
+                spdlog::trace("MPI({}): Received scatter message from computing node #{}", m_ID, msg.m_sourceID.value());
 
                 data = std::move(msg.m_data);
                 m_scatter.messages.erase(msgIterator);
@@ -1117,14 +1138,30 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
             }
         }
 
-        // Wait for the message
-        while(true) {
-            m_scatter.notifier.wait(lock);
+        size_t omittedMsgAmount = m_scatter.messages.size();
+        if(omittedMsgAmount > 0) {
+            spdlog::debug("MPI({}): Omitted {} messages for scatter..", m_ID, omittedMsgAmount);
+        }
 
-            auto &msg = *m_scatter.messages.back();
+        // Wait for the message
+        while(!bAlreadyReceived) {
+            if(m_scatter.messages.size() <= omittedMsgAmount) {
+                m_scatter.notifier.wait(lock, [&]() { return (m_scatter.messages.size() > omittedMsgAmount); });
+            }
+
+            auto &msg = *m_scatter.messages.at(omittedMsgAmount);
 
             if(msg.m_sourceID.value() != sourceID) {
-                spdlog::warn("MPI({}): Received message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
+                spdlog::warn("MPI({}): Received scatter message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
+
+                if(0 != omittedMsgAmount) {
+                    std::string omittedSourceIDs;
+                    for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                        omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                    }
+
+                    spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                }
 
                 continue;
             }
@@ -1132,7 +1169,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
             spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
 
             data = std::move(msg.m_data);
-            m_scatter.messages.pop_back();
+            m_scatter.messages.erase(m_scatter.messages.begin() + omittedMsgAmount);
 
             break;
         }
