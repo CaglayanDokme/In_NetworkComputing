@@ -699,7 +699,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
     }
     else { // Coming from a down-port
-        const auto expectedSize = compNodeAmount - (assocCompNodeAmount - downPortAmount); // Each edge switch has down-port amount of computing nodes
+        const auto expectedSize = compNodeAmount - downPortAmount; // The first edge switch has already distributed to down-port amount of computing nodes
 
         if(msg->m_data.size() != expectedSize) {
             spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not equal to expected size({})!", m_ID, msg->m_data.size(), expectedSize);
@@ -709,7 +709,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
         // Redirect to other down-port(s) (e.g. edge switches)
         for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
-            if(downPortIdx == (sourcePortIdx - getUpPortAmount())) {
+            if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
                 continue;
             }
 
@@ -725,9 +725,10 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
                     throw std::runtime_error("Aggregate Switch: Computing node is not found in the scatter message!");
                 }
 
-                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = compNodeIdx;
+                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = iterator->first;
                 txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).second = std::move(iterator->second);
-                msg->m_data.erase(iterator); // Extract the redirected content
+
+                msg->m_data.erase(iterator); // Extract the redirected content to optimize search and prepare for up-port redirection
             }
 
             getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
