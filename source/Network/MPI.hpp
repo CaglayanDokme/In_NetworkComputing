@@ -21,12 +21,6 @@ namespace Network {
         std::condition_variable notifier;
     };
 
-    template<>
-    struct StateHolder<void> {
-        std::mutex mutex;
-        std::condition_variable notifier;
-    };
-
     class MPI {
     public: /** Aliases **/
         using ReduceOp = Messages::ReduceOperation;
