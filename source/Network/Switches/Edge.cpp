@@ -767,61 +767,71 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
         throw std::runtime_error("Edge Switch: Source ID and source port index didn't match in scatter message!");
     }
 
-    auto remainingCompNodeAmount = compNodeAmount - 1;
+    if(0 != (msg->m_data.size() % compNodeAmount)) {
+        spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by the computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount);
 
-    if(0 != (msg->m_data.size() % remainingCompNodeAmount)) {
-        spdlog::critical("Edge Switch({}): Scatter message size({}) is not divisible by remaining computing node amount({})!", m_ID, msg->m_data.size(), compNodeAmount - 1);
-
-        throw std::runtime_error("Edge Switch: Scatter message size is not divisible by computing node amount!");
+        throw std::runtime_error("Edge Switch: Scatter message size is not divisible by the computing node amount!");
     }
 
-    const auto chunkSize = msg->m_data.size() / remainingCompNodeAmount;
+    const auto chunkSize = msg->m_data.size() / compNodeAmount;
+
+    std::vector<
+        std::pair<
+            std::size_t,
+            decltype(msg->m_data)
+        >
+    > chunks;
+
+    chunks.reserve(compNodeAmount);
+
+    for(std::size_t compNodeIdx = 0; compNodeIdx < compNodeAmount; ++compNodeIdx) {
+        if(msg->m_sourceID.value() == compNodeIdx) {
+            continue; // Omit the source as it already extracted its own chunk
+        }
+
+        const auto chunkBegin = msg->m_data.cbegin() + (compNodeIdx * chunkSize);
+        const auto chunkEnd   = chunkBegin + chunkSize;
+
+        chunks.emplace_back(compNodeIdx, std::move(std::vector<float>(chunkBegin, chunkEnd)));
+    }
 
     // Scatter to other down-ports
     {
-        const auto firstDataIdx = firstCompNodeIdx * chunkSize;
-
-        for(std::size_t downPortIdx = 0, dataIdx = firstDataIdx; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
                 continue;
             }
 
-            spdlog::trace("Edge Switch({}): Redirecting section [{}, {}) to down-port #{}..", m_ID, dataIdx, dataIdx + chunkSize, downPortIdx);
-
             auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID.value());
-            uniqueMsg->m_data.reserve(chunkSize);
-            uniqueMsg->m_data.assign(msg->m_data.cbegin() + dataIdx, msg->m_data.cbegin() + dataIdx + chunkSize);
+
+            auto pChunk = std::find_if(chunks.begin(), chunks.end(), [compNodeIdx = firstCompNodeIdx + downPortIdx](const auto& entry) { return entry.first == compNodeIdx; });
+
+            if(pChunk == chunks.end()) {
+                spdlog::critical("Edge Switch({}): Chunk for down-port #{} (i.e. computing node #{}) not found!", m_ID, downPortIdx, firstCompNodeIdx + downPortIdx);
+
+                throw std::runtime_error("Edge Switch: Chunk for down-port not found!");
+            }
+
+            spdlog::trace("Edge Switch({}): Redirecting chunk for computing node #{} to down-port #{}..", m_ID, pChunk->first, downPortIdx);
+
+            uniqueMsg->m_data = std::move(pChunk->second);
+            chunks.erase(pChunk);
 
             getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
-
-            dataIdx += chunkSize;
-        }
-
-        // Remove scattered section
-        {
-            const std::size_t scatterSize = chunkSize * (getDownPortAmount() - 1);
-
-            spdlog::trace("Edge Switch({}): Removing section [{}, {})..", m_ID, firstDataIdx, firstDataIdx + scatterSize);
-            msg->m_data.erase(msg->m_data.cbegin() + firstDataIdx, msg->m_data.cbegin() + firstDataIdx + scatterSize);
         }
     }
 
-    remainingCompNodeAmount = compNodeAmount - getDownPortAmount();
+    if(chunks.size() != (compNodeAmount - getDownPortAmount())) {
+        spdlog::critical("Edge Switch({}): Chunks weren't distributed properly!", m_ID);
+
+        throw std::runtime_error("Edge Switch: Chunks weren't distributed properly!");
+    }
 
     // Re-direct the rest to aggregate switch
     {
         auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
 
-        txMsg->m_data.resize(remainingCompNodeAmount);
-
-        for(std::size_t i = 0; i < remainingCompNodeAmount; ++i) {
-            auto &targetData = txMsg->m_data.at(i).second;
-            txMsg->m_data.at(i).first = (i < firstCompNodeIdx) ? i : (i + getDownPortAmount());
-
-            targetData.resize(chunkSize);
-            std::copy(msg->m_data.cbegin() + (i * chunkSize), msg->m_data.cbegin() + ((i + 1) * chunkSize), targetData.begin());
-        }
-
+        txMsg->m_data = std::move(chunks);
         getAvailableUpPort().pushOutgoing(std::move(txMsg));
     }
 }

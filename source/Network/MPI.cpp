@@ -1082,7 +1082,6 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
 
         std::vector<float> localChunk;
         localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
-        data.erase(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
 
         auto msg = std::make_unique<Messages::Scatter>(m_ID);
         msg->m_data = std::move(data);
