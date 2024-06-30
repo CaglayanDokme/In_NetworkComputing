@@ -100,7 +100,7 @@ Scatter::Scatter(const std::size_t sourceID)
     // Nothing
 }
 
-Scatter::Scatter(const std::size_t destinationID, const std::size_t sourceID)
+Scatter::Scatter(const std::size_t sourceID, const std::size_t destinationID)
 : BaseMessage(e_Type::Scatter, sourceID, destinationID)
 {
     // Nothing
