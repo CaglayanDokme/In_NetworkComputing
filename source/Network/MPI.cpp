@@ -903,28 +903,63 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
     }
 
     if(m_ID == destinationID) {
-        std::unique_lock lock(m_reduce.mutex);
+        if(Network::Switches::isNetworkComputingEnabled()) {
+            std::unique_lock lock(m_reduce.mutex);
 
-        // Check the already queued messages
-        {
-            auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
-                if(msg->m_opType != operation) {
-                    return false;
+            // Check the already queued messages
+            {
+                auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
+                    if(msg->m_opType != operation) {
+                        return false;
+                    }
+
+                    if(msg->m_data.size() != data.size()) {
+                        spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
+
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                if(msgIterator != m_reduce.messages.cend()) {
+                    spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+                    auto &msg = *msgIterator->get();
+
+                    std::transform( data.cbegin(),
+                                    data.cend(),
+                                    msg.m_data.cbegin(),
+                                    data.begin(),
+                                    [operation](const float &lhs, const float &rhs) {
+                                        return Messages::reduce(lhs, rhs, operation);
+                                    });
+
+                    m_reduce.messages.erase(msgIterator);
+
+                    return;
+                }
+            }
+
+            // Wait for the message
+            while(true) {
+                m_reduce.notifier.wait(lock);
+
+                auto &msg = *m_reduce.messages.back();
+
+                if(msg.m_opType != operation) {
+                    spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+
+                    continue;
                 }
 
-                if(msg->m_data.size() != data.size()) {
-                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
+                if(msg.m_data.size() != data.size()) {
+                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
 
-                    return false;
+                    continue;
                 }
 
-                return true;
-            });
-
-            if(msgIterator != m_reduce.messages.cend()) {
                 spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-                auto &msg = *msgIterator->get();
 
                 std::transform( data.cbegin(),
                                 data.cend(),
@@ -934,47 +969,59 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
                                     return Messages::reduce(lhs, rhs, operation);
                                 });
 
-                m_reduce.messages.erase(msgIterator);
+                m_reduce.messages.pop_back();
 
-                return;
+                break;
             }
         }
+        else {
+            std::unique_lock lock(m_reduce.mutex);
 
-        // Wait for the message
-        while(true) {
-            m_reduce.notifier.wait(lock);
+            std::vector<bool> rxFlags(Network::Constants::deriveComputingNodeAmount(), false);
+            rxFlags.at(m_ID) = true;
 
-            auto &msg = *m_reduce.messages.back();
+            // Process incoming messages
+            while(!std::all_of(rxFlags.cbegin(), rxFlags.cend(), [](const auto &flag) { return (true == flag); })) {
+                if(m_reduce.messages.empty()) {
+                    m_reduce.notifier.wait(lock, [&]() { return !m_reduce.messages.empty(); });
+                }
 
-            if(msg.m_opType != operation) {
-                spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+                for(const auto &msg : m_reduce.messages) {
+                    if(msg->m_data.size() != data.size()) {
+                        spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
 
-                continue;
+                        throw std::runtime_error("MPI: Received data size doesn't match the expected size!");
+                    }
+
+                    if(msg->m_opType != operation) {
+                        spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg->m_opType), Messages::toString(operation));
+
+                        throw std::runtime_error("MPI: Received data with invalid operation!");
+                    }
+
+                    if(rxFlags.at(msg->m_sourceID.value())) {
+                        spdlog::critical("MPI({}): Received duplicate data from node #{}!", m_ID, msg->m_sourceID.value());
+
+                        throw std::runtime_error("MPI: Received duplicate data!");
+                    }
+
+                    std::transform( data.cbegin(),
+                                    data.cend(),
+                                    msg->m_data.cbegin(),
+                                    data.begin(),
+                                    [operation](const float &lhs, const float &rhs) {
+                                        return Messages::reduce(lhs, rhs, operation);
+                                    });
+
+                    rxFlags.at(msg->m_sourceID.value()) = true;
+                }
+
+                m_reduce.messages.clear();
             }
-
-            if(msg.m_data.size() != data.size()) {
-                spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
-
-                continue;
-            }
-
-            spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-            std::transform( data.cbegin(),
-                            data.cend(),
-                            msg.m_data.cbegin(),
-                            data.begin(),
-                            [operation](const float &lhs, const float &rhs) {
-                                return Messages::reduce(lhs, rhs, operation);
-                            });
-
-            m_reduce.messages.pop_back();
-
-            break;
         }
     }
     else {
-        auto msg = std::make_unique<Messages::Reduce>(destinationID, operation);
+        auto msg = std::make_unique<Messages::Reduce>(m_ID, destinationID, operation);
         msg->m_data = data;
 
         // Push the message to the port
