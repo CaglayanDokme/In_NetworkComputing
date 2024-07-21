@@ -1258,7 +1258,7 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
         }
     }
     else {
-        auto msg = std::make_unique<Messages::Gather>(destinationID);
+        auto msg = std::make_unique<Messages::Gather>(m_ID, destinationID);
         msg->m_data = data;
 
         send(std::move(msg));
