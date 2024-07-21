@@ -4,7 +4,24 @@
 #include <vector>
 
 namespace Network::Switches {
+    /**
+     * @brief Initially, set the whether the switches will have computing capabilities
+     * @param enable True to enable in-network computing capabilities
+     */
+    void setNetworkComputing(const bool enable);
+
+    /**
+     * @brief  Check if the switches have computing capabilities
+     * @return True If the switches can compute
+     */
+    [[nodiscard]] bool isNetworkComputingEnabled();
+
     class ISwitch {
+    public: /** Struct Declarations **/
+        struct Statistics {
+            size_t totalProcessedMessages;
+        };
+
     protected: /** Construction **/
         /**
          * @brief Construct a base switch object
@@ -21,7 +38,6 @@ namespace Network::Switches {
 
         // Forbid copying
         ISwitch(const ISwitch &) = delete;
-
         ISwitch &operator=(const ISwitch &) = delete;
 
         // Must be move-able to store in containers
@@ -50,9 +66,22 @@ namespace Network::Switches {
          */
         [[nodiscard]] bool isReady() const;
 
+        /**
+         * @brief  Check if the switch has computing capabilities
+         * @return True If the switch can compute
+         */
+        [[nodiscard]] bool canCompute() const;
+
+        /**
+         * @brief  Get the statistics of the switch
+         * @return Object containing the statistics of the switch
+         */
+        [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
+
     protected: /** Members **/
         const size_t m_ID;
         const std::size_t m_portAmount;
+        Statistics m_statistics;
         std::vector<Port> m_ports;
     };
 }

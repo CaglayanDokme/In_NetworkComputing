@@ -1,4 +1,4 @@
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 #include "spdlog/spdlog.h"
 #include "Core.hpp"
 
@@ -14,8 +14,8 @@ Core::Core(const std::size_t portAmount)
     }
 
     // Initialize barrier requests
-    for(std::size_t compNodeIdx = 0; compNodeIdx < Utilities::deriveComputingNodeAmount(m_portAmount); ++compNodeIdx) {
-        m_barrierRequestFlags.insert({compNodeIdx, false});
+    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx) {
+        m_barrierRequestFlags.insert({sourcePortIdx, false});
     }
 
     // Initialize reduce requests
@@ -42,7 +42,9 @@ bool Core::tick()
     }
 
     // Check all ports for incoming messages
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
+    bool bMsgReceived = false;
+    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
+        const auto sourcePortIdx = m_nextPort;
         auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
@@ -51,7 +53,17 @@ bool Core::tick()
 
         auto anyMsg = sourcePort.popIncoming();
 
+        bMsgReceived = true;
+        ++m_statistics.totalProcessedMessages;
+
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+        // Is network computing enabled?
+        if(!canCompute()) {
+            redirect(sourcePortIdx, std::move(anyMsg));
+
+            continue;
+        }
 
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
@@ -104,25 +116,14 @@ bool Core::tick()
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
-    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID);
-
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
-    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
-
-    if(sourcePortIdx == targetPortIdx) {
-        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
-
-        throw std::runtime_error("Core Switch: Target and source ports are the same!");
-    }
-
-    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
+    redirect(sourcePortIdx, std::move(msg));
 }
 
 void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
-    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID);
+    spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID.value());
 
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
     if(sourcePortIdx == targetPortIdx) {
@@ -153,8 +154,10 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
 {
     // Process message
     {
-        if(auto &barrierRequest = m_barrierRequestFlags.at(msg->m_sourceID); barrierRequest) {
-            spdlog::warn("Core Switch({}): Computing node #{} already sent a barrier request!", m_ID, msg->m_sourceID);
+        if(auto &barrierRequest = m_barrierRequestFlags.at(sourcePortIdx); barrierRequest) {
+            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
         }
         else {
             barrierRequest = true;
@@ -162,19 +165,17 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 
     // Check for barrier release
-    {
-        if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
-            spdlog::trace("Core Switch({}): All computing nodes sent barrier requests, releasing the barrier..", m_ID);
+    if(std::all_of(m_barrierRequestFlags.cbegin(), m_barrierRequestFlags.cend(), [](const auto& entry) { return entry.second; })) {
+        spdlog::trace("Core Switch({}): All computing nodes sent barrier requests, releasing the barrier..", m_ID);
 
-            // Send barrier release to all ports
-            for(auto &port: m_ports) {
-                port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());
-            }
+        // Send barrier release to all ports
+        for(auto &port: m_ports) {
+            port.pushOutgoing(std::make_unique<Messages::BarrierRelease>());
+        }
 
-            // Reset all requests
-            for(auto &elem: m_barrierRequestFlags) {
-                elem.second = false;
-            }
+        // Reset all requests
+        for(auto &elem: m_barrierRequestFlags) {
+            elem.second = false;
         }
     }
 }
@@ -183,11 +184,11 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
 {
     // Process message
     {
-        spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg->m_destinationID);
+        spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg->m_destinationID.value());
 
         // Check if this is the first reduce message
         if(std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; })) {
-            m_reduceStates.destinationID           = msg->m_destinationID;
+            m_reduceStates.destinationID           = msg->m_destinationID.value();
             m_reduceStates.destinationPortID       = m_reduceStates.destinationID / compNodePerPort;
             m_reduceStates.opType                  = msg->m_opType;
             m_reduceStates.value                   = std::move(msg->m_data);
@@ -218,8 +219,8 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 throw std::runtime_error("Core Switch: Source port was actually the target port!");
             }
 
-            if(m_reduceStates.destinationID != msg->m_destinationID) {
-                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID);
+            if(m_reduceStates.destinationID != msg->m_destinationID.value()) {
+                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID.value());
 
                 throw std::runtime_error("Core Switch: Destination ID doesn't match in reduce messages!");
             }
@@ -338,7 +339,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
             continue;
         }
 
-        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+        auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
         txMsg->m_data.resize(compNodePerPort);
 
         const auto firstCompNodeIdx = targetPortIdx * compNodePerPort;
@@ -369,7 +370,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         throw std::runtime_error("Core Switch: Received empty inter-switch gather message!");
     }
 
-    const auto targetPortIdx = msg->m_destinationID / compNodePerPort;
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
     spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
 
     if(sourcePortIdx == targetPortIdx) {
@@ -433,4 +434,30 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
         m_allGatherStates.value = std::move(msg->m_data);
         m_allGatherStates.flags.at(sourcePortIdx) = true;
     }
+}
+
+void Core::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+{
+    if(!msg) {
+        spdlog::error("Core Switch({}): Received null message for redirection!", m_ID);
+
+        throw std::runtime_error("Null message for redirection!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::error("Core Switch({}): Message {} doesn't have a destination ID!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Message doesn't have a destination ID!");
+    }
+
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
+    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
+
+    if(sourcePortIdx == targetPortIdx) {
+        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Target and source ports are the same!");
+    }
+
+    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }

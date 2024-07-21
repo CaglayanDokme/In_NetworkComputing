@@ -1,7 +1,7 @@
 #include "Aggregate.hpp"
 #include "spdlog/spdlog.h"
 #include "Network/Message.hpp"
-#include "Network/Derivations.hpp"
+#include "Network/Constants.hpp"
 
 using namespace Network::Switches;
 
@@ -24,9 +24,17 @@ Aggregate::Aggregate(const std::size_t portAmount)
         }
     }
 
-    // Initialize barrier release flags
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        m_barrierReleaseFlags.insert({upPortIdx, false});
+    // Initialize barrier flags
+    {
+        // Request flags
+        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            m_barrierRequestFlags.insert({downPortIdx, false});
+        }
+
+        // Release flags
+        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            m_barrierReleaseFlags.insert({upPortIdx, false});
+        }
     }
 
     // Initialize reduce requests
@@ -132,8 +140,9 @@ bool Aggregate::tick()
 
     // Check all ports for incoming messages
     // TODO Should we process one message for each port at every tick?
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_ports.size(); ++sourcePortIdx) {
-        const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
+    bool bMsgReceived = false;
+    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
+        const auto sourcePortIdx = m_nextPort;
         auto &sourcePort = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
@@ -141,6 +150,18 @@ bool Aggregate::tick()
         }
 
         auto anyMsg = sourcePort.popIncoming();
+
+        bMsgReceived = true;
+        ++m_statistics.totalProcessedMessages;
+
+        spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+        // Is network computing enabled?
+        if(!canCompute()) {
+            redirect(sourcePortIdx, std::move(anyMsg));
+
+            continue;
+        }
 
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
@@ -219,29 +240,15 @@ Network::Port &Aggregate::getDownPort(const size_t &portID)
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
-    spdlog::trace("Aggregate Switch({}): Message received from sourcePort #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
-
-    // Decide on direction (up or down)
-    if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
-        spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
-
-        auto &targetPort = search->second;
-
-        targetPort.pushOutgoing(std::move(msg));
-    }
-    else { // Re-direct to up-port(s)
-        spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
-
-        getAvailableUpPort().pushOutgoing(std::move(msg));
-    }
+    redirect(sourcePortIdx, std::move(msg));
 }
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
-    spdlog::trace("Aggregate Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID);
+    spdlog::trace("Aggregate Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
 
     // Decide on direction
-    if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
         spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
 
         auto &targetPort = search->second;
@@ -293,17 +300,42 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
 {
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
     if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
         spdlog::critical("Aggregate Switch({}): Barrier request received from an up-port!", m_ID);
-        spdlog::debug("Aggregate Switch({}): Source ID was #{}!", m_ID, msg->m_sourceID);
+        spdlog::debug("Aggregate Switch({}): Source ID was #{}!", m_ID, msg->m_sourceID.value());
 
         throw std::runtime_error("Barrier request in wrong direction!");
     }
 
-    // Re-direct to all up-ports
-    for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-        auto uniqueMsg = std::make_unique<Network::Messages::BarrierRequest>(*msg);
-        getUpPort(upPortIdx).pushOutgoing(std::move(uniqueMsg));
+    // Save into flags
+    {
+        const auto downPortIdx = sourcePortIdx - getUpPortAmount();
+
+        if(m_barrierRequestFlags.at(downPortIdx)) {
+            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+
+            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
+        }
+        else {
+            m_barrierRequestFlags.at(downPortIdx) = true;
+        }
+    }
+
+    // Check for re-transmission to up-ports
+    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto& entry) { return entry.second; })) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            getUpPort(upPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRequest>()));
+        }
+
+        for(auto &entry : m_barrierRequestFlags) {
+            entry.second = false;
+        }
     }
 }
 
@@ -359,7 +391,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     const bool bOngoingRedirection = !std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; });
 
     // Decide on direction (up or down)
-    auto search = m_downPortTable.find(msg->m_destinationID);
+    auto search = m_downPortTable.find(msg->m_destinationID.value());
 
     if((search != m_downPortTable.end())) {
         if(bOngoingRedirection) {
@@ -459,7 +491,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             }
         }
         else {
-            m_reduceStates.destinationID = msg->m_destinationID;
+            m_reduceStates.destinationID = msg->m_destinationID.value();
             m_reduceStates.opType        = msg->m_opType;
             m_reduceStates.value         = std::move(msg->m_data);
 
@@ -625,7 +657,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
-    static const auto compNodeAmount = Network::Utilities::deriveComputingNodeAmount(m_portAmount);
+    static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
     static const auto downPortAmount = getDownPortAmount();
 
     spdlog::trace("Aggregate Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
@@ -646,7 +678,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
         // Redirect to down-ports (e.g. edge switches)
         for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
-            auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+            auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
             txMsg->m_data.resize(downPortAmount); // Each edge switch has down-port amount of computing nodes
 
             const auto localFirstCompNodeIdx = firstCompNodeIdx + (downPortIdx * downPortAmount);
@@ -667,7 +699,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
     }
     else { // Coming from a down-port
-        const auto expectedSize = compNodeAmount - (assocCompNodeAmount - downPortAmount); // Each edge switch has down-port amount of computing nodes
+        const auto expectedSize = compNodeAmount - downPortAmount; // The first edge switch has already distributed to down-port amount of computing nodes
 
         if(msg->m_data.size() != expectedSize) {
             spdlog::critical("Aggregate Switch({}): Scatter message size({}) is not equal to expected size({})!", m_ID, msg->m_data.size(), expectedSize);
@@ -677,11 +709,11 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
         // Redirect to other down-port(s) (e.g. edge switches)
         for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
-            if(downPortIdx == (sourcePortIdx - getUpPortAmount())) {
+            if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
                 continue;
             }
 
-            auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID);
+            auto txMsg = std::make_unique<Messages::InterSwitch::Scatter>(msg->m_sourceID.value());
             txMsg->m_data.resize(downPortAmount); // Each edge switch has down-port amount of computing nodes
 
             const auto localFirstCompNodeIdx = firstCompNodeIdx + (downPortIdx * downPortAmount);
@@ -693,9 +725,10 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
                     throw std::runtime_error("Aggregate Switch: Computing node is not found in the scatter message!");
                 }
 
-                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = compNodeIdx;
+                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = iterator->first;
                 txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).second = std::move(iterator->second);
-                msg->m_data.erase(iterator); // Extract the redirected content
+
+                msg->m_data.erase(iterator); // Extract the redirected content to optimize search and prepare for up-port redirection
             }
 
             getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
@@ -720,7 +753,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 
     if(bDownPort) {
         // Decide on direction (up or down)
-        if(auto search = m_downPortTable.find(msg->m_destinationID); search != m_downPortTable.end()) {
+        if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
             spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
 
             if(getPort(sourcePortIdx) == search->second) {
@@ -738,7 +771,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
     }
     else {
-        auto search = m_downPortTable.find(msg->m_destinationID);
+        auto search = m_downPortTable.find(msg->m_destinationID.value());
 
         if(search == m_downPortTable.end()) {
             spdlog::critical("Aggregate Switch({}): Gather message is not destined to a down-port!", m_ID);
@@ -857,6 +890,35 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             state.value = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
+    }
+}
+
+void Aggregate::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+{
+    if(!msg) {
+        spdlog::error("Aggregate Switch({}): Received null message for redirection!", m_ID);
+
+        throw std::runtime_error("Null message for redirection!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::error("Aggregate Switch({}): Message {} doesn't have a destination ID!", m_ID, msg->typeToString());
+
+        throw std::runtime_error("Message doesn't have a destination ID!");
+    }
+
+    // Decide on direction (up or down)
+    if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
+        spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+
+        auto &targetPort = search->second;
+
+        targetPort.pushOutgoing(std::move(msg));
+    }
+    else { // Re-direct to up-port(s)
+        spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
+
+        getAvailableUpPort().pushOutgoing(std::move(msg));
     }
 }
 

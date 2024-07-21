@@ -9,9 +9,6 @@ namespace Network::Messages::InterSwitch {
         Scatter() = delete;
         explicit Scatter(const std::size_t sourceID);
 
-    public: /** Addressing **/
-        std::size_t m_sourceID;
-
     public: /** Data **/
         std::vector<
             std::pair<
@@ -25,9 +22,6 @@ namespace Network::Messages::InterSwitch {
     public: /** Construction **/
         Gather() = delete;
         explicit Gather(const std::size_t destinationID);
-
-    public: /** Addressing **/
-        const std::size_t m_destinationID;
 
     public: /** Data **/
         std::vector<
