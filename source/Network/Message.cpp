@@ -107,7 +107,7 @@ Scatter::Scatter(const std::size_t sourceID, const std::size_t destinationID)
 }
 
 Gather::Gather(const std::size_t destinationID)
-: BaseMessage(e_Type::Gather, destinationID)
+: BaseMessage(e_Type::Gather, std::nullopt, destinationID)
 {
     // Nothing
 }
