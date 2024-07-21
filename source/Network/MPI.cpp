@@ -1066,7 +1066,7 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         m_reduceAll.notifier.wait(lock);
 
         if(m_reduceAll.messages.size() > 1) {
-            spdlog::warn("MPI({}): More reduce-all messages({}) are pending, communication might be corrupted!", m_ID, m_reduceAll.messages.size());
+            spdlog::warn("MPI({}): Mutiple reduce-all messages({}) are pending, communication might be corrupted!", m_ID, m_reduceAll.messages.size());
         }
 
         auto &msg = *m_reduceAll.messages.back();

@@ -106,11 +106,11 @@ Edge::Edge(const std::size_t portAmount)
         // To-down
         {
             // Up-port receive flags
-            for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
+            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
                 m_reduceAllStates.toDown.receiveFlags.insert({portIdx, false});
             }
 
-            if(m_reduceAllStates.toDown.receiveFlags.size() != m_portAmount) {
+            if(m_reduceAllStates.toDown.receiveFlags.size() != getUpPortAmount()) {
                 spdlog::critical("Edge Switch({}): Amount of to-down reduce-all requests is not equal to up-port amount!", m_ID);
 
                 throw std::runtime_error("Invalid mapping!");
