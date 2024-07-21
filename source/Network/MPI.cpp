@@ -1187,18 +1187,54 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
     }
 
     if(m_ID == destinationID) {
-        std::unique_lock lock(m_gather.mutex);
+        if(Network::Switches::isNetworkComputingEnabled()) {
+            std::unique_lock lock(m_gather.mutex);
 
-        // Check the already queued messages
-        do {
-            auto msgIterator = std::find_if(m_gather.messages.begin(), m_gather.messages.end(), [destinationID](auto &&msg) {
-                return (msg->m_destinationID.value() == destinationID);
-            });
+            // Check the already queued messages
+            do {
+                auto msgIterator = std::find_if(m_gather.messages.begin(), m_gather.messages.end(), [destinationID](auto &&msg) {
+                    return (msg->m_destinationID.value() == destinationID);
+                });
 
-            if(msgIterator != m_gather.messages.cend()) {
-                spdlog::trace("MPI({}): Gathering data with received message..", m_ID);
+                if(msgIterator != m_gather.messages.cend()) {
+                    spdlog::trace("MPI({}): Gathering data with received message..", m_ID);
 
-                auto &msg = *msgIterator->get();
+                    auto &msg = *msgIterator->get();
+
+                    if((msg.m_data.size() % (Network::Constants::deriveComputingNodeAmount() - 1)) != 0) {
+                        spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Constants::deriveComputingNodeAmount() - 1);
+
+                        throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
+                    }
+
+                    const auto chunkSize = msg.m_data.size() / (Network::Constants::deriveComputingNodeAmount() - 1);
+                    spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
+
+                    if(data.size() != chunkSize) {
+                        spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
+
+                        break;
+                    }
+
+                    msg.m_data.insert(msg.m_data.begin() + (m_ID * chunkSize), data.cbegin(), data.cend());
+                    data = std::move(msg.m_data);
+                    m_gather.messages.erase(msgIterator);
+
+                    return;
+                }
+            } while(false);
+
+            // Wait for the message
+            while(true) {
+                m_gather.notifier.wait(lock);
+
+                auto &msg = *m_gather.messages.back();
+
+                if(msg.m_destinationID.value() != destinationID) {
+                    spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID.value(), destinationID);
+
+                    continue;
+                }
 
                 if((msg.m_data.size() % (Network::Constants::deriveComputingNodeAmount() - 1)) != 0) {
                     spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Constants::deriveComputingNodeAmount() - 1);
@@ -1212,49 +1248,83 @@ void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
                 if(data.size() != chunkSize) {
                     spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
 
-                    break;
+                    continue;
                 }
 
                 msg.m_data.insert(msg.m_data.begin() + (m_ID * chunkSize), data.cbegin(), data.cend());
                 data = std::move(msg.m_data);
-                m_gather.messages.erase(msgIterator);
+                m_gather.messages.pop_back();
 
-                return;
+                break;
             }
-        } while(false);
+        }
+        else {
+            std::unique_lock lock(m_gather.mutex);
 
-        // Wait for the message
-        while(true) {
-            m_gather.notifier.wait(lock);
+            std::vector<
+                std::pair<
+                    size_t,             // Source ID
+                    std::vector<float>  // Data
+                >
+            > receivedData;
 
-            auto &msg = *m_gather.messages.back();
+            // Check the already queued messages
+            {
+                spdlog::trace("Checking already queued gather messages..");
 
-            if(msg.m_destinationID.value() != destinationID) {
-                spdlog::critical("MPI({}): Received data for invalid destination({}), expected {}!", m_ID, msg.m_destinationID.value(), destinationID);
+                for(auto &&msg : m_gather.messages) {
+                    auto pAlreadyReceived = std::find_if(receivedData.cbegin(), receivedData.cend(), [&](auto &&alreadyReceived) {
+                        return (alreadyReceived.first == msg->m_sourceID.value());
+                    });
 
-                continue;
+                    if(receivedData.cend() != pAlreadyReceived) {
+                        spdlog::critical("MPI({}): Received duplicate gather message from node #{}", m_ID, msg->m_sourceID.value());
+
+                        throw std::logic_error("MPI: Duplicate gather message!");
+                    }
+
+                    receivedData.emplace_back(msg->m_sourceID.value(), std::move(msg->m_data));
+                    spdlog::trace("MPI({}): Received gather message from node #{}", m_ID, msg->m_sourceID.value());
+                }
+                m_gather.messages.clear();
             }
 
-            if((msg.m_data.size() % (Network::Constants::deriveComputingNodeAmount() - 1)) != 0) {
-                spdlog::critical("MPI({}): Received data size({}) is not divisible by the computing node amount({})!", m_ID, msg.m_data.size(), Network::Constants::deriveComputingNodeAmount() - 1);
+            // Wait for the remaining messages
+            while(receivedData.size() < (Network::Constants::deriveComputingNodeAmount() - 1)) {
+                spdlog::trace("Waiting for gather messages..");
 
-                throw std::runtime_error("MPI: Received data size is not divisible by the computing node amount!");
+                m_gather.notifier.wait(lock, [&]() { return !m_gather.messages.empty(); });
+
+                for(auto &&msg : m_gather.messages) {
+                    auto pAlreadyReceived = std::find_if(receivedData.cbegin(), receivedData.cend(), [&](auto &&alreadyReceived) {
+                        return (alreadyReceived.first == msg->m_sourceID.value());
+                    });
+
+                    if(receivedData.cend() != pAlreadyReceived) {
+                        spdlog::critical("MPI({}): Received duplicate gather message from node #{}", m_ID, msg->m_sourceID.value());
+
+                        throw std::logic_error("MPI: Duplicate gather message!");
+                    }
+
+                    receivedData.emplace_back(msg->m_sourceID.value(), std::move(msg->m_data));
+                    spdlog::trace("MPI({}): Received gather message from node #{}", m_ID, msg->m_sourceID.value());
+                }
+
+                m_gather.messages.clear();
             }
 
-            const auto chunkSize = msg.m_data.size() / (Network::Constants::deriveComputingNodeAmount() - 1);
-            spdlog::trace("MPI({}): Detected gather chunk size is {}", m_ID, chunkSize);
+            // Insert own data before sorting
+            receivedData.emplace_back(m_ID, std::move(data));
 
-            if(data.size() != chunkSize) {
-                spdlog::critical("MPI({}): Expected data size({}) doesn't match the received chunk size({})!", m_ID, data.size(), chunkSize);
+            // Sort the received data
+            std::sort(receivedData.begin(), receivedData.end(), [](const auto &lhs, const auto &rhs) {
+                return (lhs.first < rhs.first);
+            });
 
-                continue;
+            // Gather the data
+            for(auto &&[sourceID, chunk] : receivedData) {
+                data.insert(data.end(), chunk.cbegin(), chunk.cend());
             }
-
-            msg.m_data.insert(msg.m_data.begin() + (m_ID * chunkSize), data.cbegin(), data.cend());
-            data = std::move(msg.m_data);
-            m_gather.messages.pop_back();
-
-            break;
         }
     }
     else {
