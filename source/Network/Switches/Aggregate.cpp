@@ -388,7 +388,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
     }
 
-    const bool bOngoingRedirection = !std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; });
+    const bool bOngoingRedirection = std::any_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return entry.second; });
 
     // Decide on direction (up or down)
     auto search = m_downPortTable.find(msg->m_destinationID.value());
@@ -430,12 +430,15 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
                 if(bFirstUpPortData) {
                     m_reduceStates.upPortReferenceValue = std::move(msg->m_data);
                 }
-                else {
+                else if(!bDownPort) {
                     if(m_reduceStates.upPortReferenceValue != msg->m_data) {
                         spdlog::critical("Aggregate Switch({}): Up-port(#{}) value doesn't match the reference value!", m_ID, sourcePortIdx);
 
                         throw std::runtime_error("Aggregate Switch: Up-port value doesn't match the reference value!");
                     }
+                }
+                else {
+                    // Nothing to do
                 }
             }
 
@@ -786,7 +789,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
 void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
     if(!msg) {
-        spdlog::critical("Aggregate Switch({}): Received an empty {} message from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
+        spdlog::critical("Aggregate Switch({}): Received an empty all-gather message from source port #{}!", m_ID, sourcePortIdx);
 
         throw std::runtime_error("Aggregate Switch: Received an empty message!");
     }
