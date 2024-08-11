@@ -1050,6 +1050,8 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
     spdlog::trace("MPI({}): Reducing data", m_ID);
 
     if(Network::Switches::isNetworkComputingEnabled()) {
+        const auto dataSize = data.size();
+
         // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
         std::unique_lock lock(m_reduceAll.mutex);
 
@@ -1061,7 +1063,6 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         }
 
         // Wait for the message
-        const auto dataSize = data.size();
         while(true) {
             m_reduceAll.notifier.wait(lock);
 

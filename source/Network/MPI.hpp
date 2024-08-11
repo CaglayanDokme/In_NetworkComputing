@@ -138,6 +138,8 @@ namespace Network {
          * @brief Reduce the data of all computing nodes to all nodes
          * @param data      The data(array) to be reduced
          * @param operation The operation to be applied during the reduction
+         *
+         * @note A barrier is suggested after this call
          */
         void reduceAll(std::vector<float> &data, const ReduceOp operation);
 
@@ -145,6 +147,8 @@ namespace Network {
          * @brief Reduce the data of all computing nodes to all nodes
          * @param data      The data to be reduced
          * @param operation The operation to be applied during the reduction
+         *
+         * @note A barrier is suggested after this call
          */
         void reduceAll(float &data, const ReduceOp operation);
 
