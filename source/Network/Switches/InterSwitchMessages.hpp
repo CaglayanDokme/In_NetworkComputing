@@ -7,12 +7,12 @@ namespace Network::Messages::InterSwitch {
     class Scatter : public BaseMessage {
     public: /** Construction **/
         Scatter() = delete;
-        explicit Scatter(const std::size_t sourceID);
+        explicit Scatter(const size_t sourceID);
 
     public: /** Data **/
         std::vector<
             std::pair<
-                std::size_t,                         // Destination computing node ID
+                size_t,                         // Destination computing node ID
                 decltype(Messages::Scatter::m_data)  // Data to be scattered
             >
         > m_data;
@@ -21,12 +21,12 @@ namespace Network::Messages::InterSwitch {
     class Gather : public BaseMessage {
     public: /** Construction **/
         Gather() = delete;
-        explicit Gather(const std::size_t destinationID);
+        explicit Gather(const size_t destinationID);
 
     public: /** Data **/
         std::vector<
             std::pair<
-                std::size_t,                        // Source computing node ID
+                size_t,                        // Source computing node ID
                 decltype(Messages::Gather::m_data)  // Data to be gathered
             >
         > m_data;
@@ -39,7 +39,7 @@ namespace Network::Messages::InterSwitch {
     public: /** Data **/
         std::vector<
             std::pair<
-                std::size_t,                           // Source computing node ID
+                size_t,                           // Source computing node ID
                 decltype(Messages::AllGather::m_data)  // Data to be gathered
             >
         > m_data;

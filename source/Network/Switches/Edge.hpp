@@ -9,7 +9,7 @@ namespace Network::Switches {
     class Edge : public ISwitch {
     public: /** Construction **/
         Edge() = delete;
-        explicit  Edge(const std::size_t portAmount);
+        explicit  Edge(const size_t portAmount);
 
         // Forbid copying
         Edge(const Edge &) = delete;
@@ -29,7 +29,7 @@ namespace Network::Switches {
          *
          * @note Up-port #0 is connected to the aggregate switch with smallest ID
          */
-        [[nodiscard]] Port &getUpPort(const std::size_t &portID);
+        [[nodiscard]] Port &getUpPort(const size_t &portID);
 
         /**
          * @brief  Get reference to a specific down-port of this switch
@@ -38,7 +38,7 @@ namespace Network::Switches {
          *
          * @note Down-port #0 is connected to the computing node with smallest ID
          */
-        [[nodiscard]] Port &getDownPort(const std::size_t &portID);
+        [[nodiscard]] Port &getDownPort(const size_t &portID);
 
     private:
         /**
@@ -46,26 +46,26 @@ namespace Network::Switches {
          * @param sourcePortIdx Index of the source port
          * @param msg          Message to be processed
          */
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
-        void process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
 
         /**
          * @brief Redirect a message to its destination
          * @param sourcePortIdx Index of the source port
          * @param msg Message to be redirected
          */
-        void redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg);
+        void redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg);
 
         /**
          * @brief  Find the up-port with minimum messages to be sent (i.e. minimum potential delay)
@@ -77,32 +77,32 @@ namespace Network::Switches {
          * @brief  Get number of up/down ports
          * @return Amount of requested port type
          */
-        [[nodiscard]] std::size_t getDownPortAmount() const;
-        [[nodiscard]] std::size_t getUpPortAmount() const;
+        [[nodiscard]] size_t getDownPortAmount() const;
+        [[nodiscard]] size_t getUpPortAmount() const;
 
     private: /** Members **/
-        const std::size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
-        std::size_t m_nextPort{0};
-        std::map<std::size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
-        std::map<std::size_t, bool> m_barrierRequestFlags;  // Key: Down-port index, Value: True/False
-        std::map<std::size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
+        const size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
+        size_t m_nextPort{0};
+        std::map<size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
+        std::map<size_t, bool> m_barrierRequestFlags;  // Key: Down-port index, Value: True/False
+        std::map<size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
 
         struct {
             struct {
                 bool bOngoing{false};                     // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags; // Key: Port index, Value: True/False
-                std::size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
+                std::map<size_t, bool> receiveFlags; // Key: Port index, Value: True/False
+                size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
                 Messages::Reduce::OpType opType;          // Current operation type
                 decltype(Messages::Reduce::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp, toDown;
 
-            std::size_t sameColumnPortID; // ID of the same-column up-port
+            size_t sameColumnPortID; // ID of the same-column up-port
         } m_reduceStates;
 
         struct {
             struct {
                 bool bOngoing{false};                        // True if a reduce operation is ongoing
-                std::map<std::size_t, bool> receiveFlags;    // Key: Port index (Only down-ports or only up-ports), Value: True/False
+                std::map<size_t, bool> receiveFlags;    // Key: Port index (Only down-ports or only up-ports), Value: True/False
                 Messages::ReduceAll::OpType opType;          // Current operation type
                 decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp, toDown;
@@ -111,16 +111,16 @@ namespace Network::Switches {
         struct GatherState {
             struct {
                 bool bOngoing{false};                                  // True if a gather operation is ongoing
-                std::size_t destinationID;                             // ID of the destined computing node (i.e. root process of gather operation)
+                size_t destinationID;                             // ID of the destined computing node (i.e. root process of gather operation)
                 decltype(Messages::InterSwitch::Gather::m_data) value; // Current gathered value
-                std::size_t refSize;                                    // Expected size of the gathered data
+                size_t refSize;                                    // Expected size of the gathered data
             } toUp;
 
             struct ToDown {
                 bool bOngoing{false};                                   // True if a gather operation is ongoing
-                std::size_t destinationID;                              // ID of the destined computing node (i.e. root process of gather operation)
+                size_t destinationID;                              // ID of the destined computing node (i.e. root process of gather operation)
                 std::vector<decltype(Messages::Gather::m_data)> value;  // Current gathered value
-                std::size_t refSize;                                    // Expected size of the gathered data
+                size_t refSize;                                    // Expected size of the gathered data
 
                 /**
                  * @brief Push data to the gather buffer
@@ -129,7 +129,7 @@ namespace Network::Switches {
                  * @param data        Data to be gathered
                  * @return True if the data is ready to be redirected to the destined computing node
                  */
-                [[nodiscard]] bool push(const std::size_t compNodeIdx, const std::size_t destID, decltype(Messages::Gather::m_data) &&data);
+                [[nodiscard]] bool push(const size_t compNodeIdx, const size_t destID, decltype(Messages::Gather::m_data) &&data);
 
                 /**
                  * @brief Reset the gather buffer to initial state
@@ -146,11 +146,11 @@ namespace Network::Switches {
 
             struct {
                 bool bOngoing{false};                                                   // True if an all-gather operation is ongoing
-                std::map<std::size_t, bool> receiveFlags;                               // Key: Port index(Up-port), Value: True/False
+                std::map<size_t, bool> receiveFlags;                               // Key: Port index(Up-port), Value: True/False
                 decltype(Messages::InterSwitch::AllGather::m_data) value;  // Current gathered value
             } toDown;
         } m_allGatherStates;
 
-        inline static std::size_t nextID = 0; // i.e. Number of edge switches in total
+        inline static size_t nextID = 0; // i.e. Number of edge switches in total
     };
 }

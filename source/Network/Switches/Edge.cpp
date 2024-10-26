@@ -6,7 +6,7 @@
 
 using namespace Network::Switches;
 
-Edge::Edge(const std::size_t portAmount)
+Edge::Edge(const size_t portAmount)
 : ISwitch(nextID++, portAmount), firstCompNodeIdx(m_ID * getDownPortAmount())
 {
     spdlog::trace("Created edge switch with ID #{}", m_ID);
@@ -24,12 +24,12 @@ Edge::Edge(const std::size_t portAmount)
     // Initialize barrier flags
     {
         // Request flags
-        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             m_barrierRequestFlags.insert({downPortIdx, false});
         }
 
         // Release flags
-        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             m_barrierReleaseFlags.insert({upPortIdx, false});
         }
     }
@@ -48,7 +48,7 @@ Edge::Edge(const std::size_t portAmount)
 
         // To-up
         {
-            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+            for(size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
                 m_reduceStates.toUp.receiveFlags.insert({portIdx, false});
             }
 
@@ -61,7 +61,7 @@ Edge::Edge(const std::size_t portAmount)
 
         // To-down
         {
-            for(std::size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
+            for(size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
                 m_reduceStates.toDown.receiveFlags.insert({portIdx, false});
             }
 
@@ -72,8 +72,8 @@ Edge::Edge(const std::size_t portAmount)
             }
         }
 
-        const std::size_t aggSwitchPerGroup = getDownPortAmount();
-        const std::size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
+        const size_t aggSwitchPerGroup = getDownPortAmount();
+        const size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
         m_reduceStates.sameColumnPortID     = localColumnIdx;
     }
 
@@ -92,7 +92,7 @@ Edge::Edge(const std::size_t portAmount)
         // To-up
         {
             // Down-port receive flags
-            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+            for(size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
                 m_reduceAllStates.toUp.receiveFlags.insert({portIdx, false});
             }
 
@@ -106,7 +106,7 @@ Edge::Edge(const std::size_t portAmount)
         // To-down
         {
             // Up-port receive flags
-            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
+            for(size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
                 m_reduceAllStates.toDown.receiveFlags.insert({portIdx, false});
             }
 
@@ -123,7 +123,7 @@ Edge::Edge(const std::size_t portAmount)
         // To-up
         {
             m_gatherStates.toUp.value.resize(getDownPortAmount());
-            for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+            for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                 m_gatherStates.toUp.value.at(downPortIdx).first = firstCompNodeIdx + downPortIdx;
             }
         }
@@ -150,7 +150,7 @@ Edge::Edge(const std::size_t portAmount)
     {
         // To-down
         {
-            for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+            for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
                 m_allGatherStates.toDown.receiveFlags.insert({upPortIdx, false});
             }
         }
@@ -281,7 +281,7 @@ Network::Port &Edge::getDownPort(const size_t &portID)
     return getPort(getUpPortAmount() + portID);
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
     if(!msg) {
         spdlog::error("Edge Switch({}): Received null direct message!", m_ID);
@@ -292,7 +292,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Di
     redirect(sourcePortIdx, std::move(msg));
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -316,7 +316,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ac
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -350,14 +350,14 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Br
     else { // Coming from an up-port
         spdlog::trace("Edge Switch({}): Redirecting to all down-ports..", m_ID);
 
-        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             auto uniqueMsg = std::make_unique<Network::Messages::BroadcastMessage>(*msg);
             getDownPort(downPortIdx).pushOutgoing(std::move(uniqueMsg));
         }
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -398,7 +398,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::BarrierRelease> msg)
+void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::BarrierRelease> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -430,7 +430,7 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::Reduce> msg)
+void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::Reduce> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -593,7 +593,7 @@ void Edge::process(const std::size_t sourcePortIdx, [[maybe_unused]] std::unique
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -636,7 +636,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
             // Check if all down-ports have sent message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 // Send reduced message to all up-ports
-                for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
                     auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
@@ -717,7 +717,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
             // Check if all up-ports have sent message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 // Send reduced message to all down-ports
-                for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                     auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
@@ -737,7 +737,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -777,14 +777,14 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
     std::vector<
         std::pair<
-            std::size_t,
+            size_t,
             decltype(msg->m_data)
         >
     > chunks;
 
     chunks.reserve(compNodeAmount);
 
-    for(std::size_t compNodeIdx = 0; compNodeIdx < compNodeAmount; ++compNodeIdx) {
+    for(size_t compNodeIdx = 0; compNodeIdx < compNodeAmount; ++compNodeIdx) {
         if(msg->m_sourceID.value() == compNodeIdx) {
             continue; // Omit the source as it already extracted its own chunk
         }
@@ -797,7 +797,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
 
     // Scatter to other down-ports
     {
-        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             if(getDownPort(downPortIdx) == getPort(sourcePortIdx)) {
                 continue;
             }
@@ -836,7 +836,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Sc
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -960,7 +960,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ga
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -1022,7 +1022,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Al
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -1078,7 +1078,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -1131,7 +1131,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 }
 
-void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -1230,7 +1230,7 @@ void Edge::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 }
 
-void Edge::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+void Edge::redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 {
     if(!msg) {
         spdlog::error("Edge Switch({}): Received null message for redirection!", m_ID);
@@ -1269,21 +1269,21 @@ Network::Port &Edge::getAvailableUpPort()
     return *std::min_element(m_ports.begin(), m_ports.begin() + getUpPortAmount(), portSearchPolicy);
 }
 
-std::size_t Edge::getDownPortAmount() const
+size_t Edge::getDownPortAmount() const
 {
-    static const std::size_t downPortAmount = m_portAmount / 2;
+    static const size_t downPortAmount = m_portAmount / 2;
 
     return downPortAmount;
 }
 
-std::size_t Edge::getUpPortAmount() const
+size_t Edge::getUpPortAmount() const
 {
-    static const std::size_t upPortAmount = m_portAmount / 2;
+    static const size_t upPortAmount = m_portAmount / 2;
 
     return upPortAmount;
 }
 
-bool Edge::GatherState::ToDown::push(const std::size_t compNodeIdx, const std::size_t destID, decltype(Messages::Gather::m_data) &&data)
+bool Edge::GatherState::ToDown::push(const size_t compNodeIdx, const size_t destID, decltype(Messages::Gather::m_data) &&data)
 {
     if(value.size() != Constants::deriveComputingNodeAmount()) {
         spdlog::critical("Edge: Gather state value size is corrupted! Expected size {}, detected {}", Constants::deriveComputingNodeAmount(), value.size());

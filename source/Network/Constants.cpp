@@ -5,9 +5,9 @@
 #include <optional>
 
 namespace Network::Constants {
-    static std::optional<std::size_t> portPerSwitch;
+    static std::optional<size_t> portPerSwitch;
 
-    void setPortPerSwitch(const std::size_t value)
+    void setPortPerSwitch(const size_t value)
     {
         if(portPerSwitch.has_value()) {
             throw std::logic_error("Port per switch amount has already been set!");
@@ -16,7 +16,7 @@ namespace Network::Constants {
         portPerSwitch = value;
     }
 
-    std::size_t getPortPerSwitch()
+    size_t getPortPerSwitch()
     {
         if(!portPerSwitch.has_value()) {
             throw std::runtime_error("Port per switch amount must be set first!");
@@ -25,9 +25,9 @@ namespace Network::Constants {
         return portPerSwitch.value();
     }
 
-    std::size_t deriveCoreSwitchAmount()
+    size_t deriveCoreSwitchAmount()
     {
-        static const auto coreSwitchAmount = static_cast<std::size_t>(std::pow(getPortPerSwitch(), 2) / 4);
+        static const auto coreSwitchAmount = static_cast<size_t>(std::pow(getPortPerSwitch(), 2) / 4);
 
         if(0 == coreSwitchAmount) {
             throw std::runtime_error("Core switch amount must be greater than 0");
@@ -36,21 +36,21 @@ namespace Network::Constants {
         return  coreSwitchAmount;
     }
 
-    std::size_t deriveAggregateSwitchAmount()
+    size_t deriveAggregateSwitchAmount()
     {
         static const auto aggregateSwitchAmount = deriveCoreSwitchAmount() * 2;
 
         return  aggregateSwitchAmount;
     }
 
-    std::size_t deriveEdgeSwitchAmount()
+    size_t deriveEdgeSwitchAmount()
     {
         static const auto edgeSwitchAmount = deriveCoreSwitchAmount() * 2;
 
         return  edgeSwitchAmount;
     }
 
-    std::size_t deriveComputingNodeAmount()
+    size_t deriveComputingNodeAmount()
     {
         static const auto compNodeAmount = deriveEdgeSwitchAmount() * (getPortPerSwitch() / 2);
 

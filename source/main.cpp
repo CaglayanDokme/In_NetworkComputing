@@ -17,7 +17,7 @@ int main(const int argc, const char *const argv[])
     options.add_options()
             ("ports",
              "Ports per switch(4, 6, ..., 2n)",
-             cxxopts::value<std::size_t>()->default_value(std::to_string(4)))
+             cxxopts::value<size_t>()->default_value(std::to_string(4)))
 
             ("log-filter",
              "Level of log filter"
@@ -58,7 +58,7 @@ int main(const int argc, const char *const argv[])
     }
 
     const bool bInNetworkComputing = arguments["network-computing"].as<bool>();
-    const std::size_t portPerSwitch = arguments["ports"].as<std::size_t>();
+    const size_t portPerSwitch = arguments["ports"].as<size_t>();
     spdlog::set_level(spdlog::level::level_enum(arguments["log-filter"].as<int>()));
     spdlog::info("Starting program..");
 
@@ -87,10 +87,10 @@ int main(const int argc, const char *const argv[])
     }
 
     // Derived constants
-    const std::size_t coreSwitchAmount      = Network::Constants::deriveCoreSwitchAmount();
-    const std::size_t aggregateSwitchAmount = Network::Constants::deriveAggregateSwitchAmount();
-    const std::size_t edgeSwitchAmount      = Network::Constants::deriveEdgeSwitchAmount();
-    const std::size_t compNodeAmount        = Network::Constants::deriveComputingNodeAmount();
+    const size_t coreSwitchAmount      = Network::Constants::deriveCoreSwitchAmount();
+    const size_t aggregateSwitchAmount = Network::Constants::deriveAggregateSwitchAmount();
+    const size_t edgeSwitchAmount      = Network::Constants::deriveEdgeSwitchAmount();
+    const size_t compNodeAmount        = Network::Constants::deriveComputingNodeAmount();
 
     // Nodes (Switch & Compute)
     std::vector<Network::Switches::Core> coreSwitches;
@@ -238,7 +238,7 @@ int main(const int argc, const char *const argv[])
     }
     spdlog::info("Network established successfully!");
 
-    std::size_t tick = 0;
+    size_t tick = 0;
     while(++tick) {
         spdlog::trace("Tick #{}", tick);
 

@@ -5,14 +5,14 @@
 
 using namespace Network::Switches;
 
-Aggregate::Aggregate(const std::size_t portAmount)
+Aggregate::Aggregate(const size_t portAmount)
 : ISwitch(nextID++, portAmount), assocCompNodeAmount(getDownPortAmount() * getDownPortAmount()), firstCompNodeIdx((m_ID / getDownPortAmount()) * assocCompNodeAmount)
 {
     spdlog::trace("Created aggregate switch with ID #{}", m_ID);
 
     // Calculate look-up table for re-direction to down ports
     {
-        const std::size_t downPortAmount = getDownPortAmount();
+        const size_t downPortAmount = getDownPortAmount();
 
         for(size_t downPortIdx = 0; downPortIdx < downPortAmount; ++downPortIdx) {
             for(size_t edgeDownPortIdx = 0; edgeDownPortIdx < downPortAmount; ++edgeDownPortIdx) {
@@ -27,12 +27,12 @@ Aggregate::Aggregate(const std::size_t portAmount)
     // Initialize barrier flags
     {
         // Request flags
-        for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+        for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             m_barrierRequestFlags.insert({downPortIdx, false});
         }
 
         // Release flags
-        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             m_barrierReleaseFlags.insert({upPortIdx, false});
         }
     }
@@ -45,12 +45,12 @@ Aggregate::Aggregate(const std::size_t portAmount)
          * In other case, the reduce message of the edge switch placed on the same column will be waited on.
          */
 
-        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx){
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx){
             m_reduceStates.flags.insert({upPortIdx, false});
         }
 
-        const std::size_t aggSwitchPerGroup = getDownPortAmount();
-        const std::size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
+        const size_t aggSwitchPerGroup = getDownPortAmount();
+        const size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
         m_reduceStates.sameColumnPortID    = getUpPortAmount() + localColumnIdx;
 
         m_reduceStates.flags.insert({m_reduceStates.sameColumnPortID, false});
@@ -71,7 +71,7 @@ Aggregate::Aggregate(const std::size_t portAmount)
         // To-up
         {
             // Down-port receive flags
-            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+            for(size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
                 m_reduceAllStates.toUp.receiveFlags.insert({portIdx, false});
             }
 
@@ -85,7 +85,7 @@ Aggregate::Aggregate(const std::size_t portAmount)
         // To-down
         {
             // Up-port receive flags
-            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
+            for(size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
                 m_reduceAllStates.toDown.receiveFlags.insert({portIdx, false});
             }
 
@@ -102,7 +102,7 @@ Aggregate::Aggregate(const std::size_t portAmount)
         // To-up
         {
             // Down-port receive flags
-            for(std::size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
+            for(size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
                 m_allGatherStates.toUp.receiveFlags.insert({portIdx, false});
             }
 
@@ -117,7 +117,7 @@ Aggregate::Aggregate(const std::size_t portAmount)
         // To-down
         {
             // Up-port receive flags
-            for(std::size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
+            for(size_t portIdx = 0; portIdx < getUpPortAmount(); ++portIdx) {
                 m_allGatherStates.toDown.receiveFlags.insert({portIdx, false});
             }
 
@@ -238,12 +238,12 @@ Network::Port &Aggregate::getDownPort(const size_t &portID)
     return getPort(getUpPortAmount() + portID);
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
     redirect(sourcePortIdx, std::move(msg));
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
     spdlog::trace("Aggregate Switch({}): Acknowledge received from port #{} destined to computing node #{}.", m_ID, sourcePortIdx, msg->m_destinationID.value());
 
@@ -262,7 +262,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
 {
     spdlog::trace("Aggregate Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 
@@ -298,7 +298,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -339,7 +339,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg)
 {
     if(sourcePortIdx >= getUpPortAmount()) { // Coming from a down-port
         spdlog::critical("Aggregate Switch({}): Barrier release received from a down-port!", m_ID);
@@ -369,7 +369,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
 {
     // Check if source port exists in source table for reduction messages
     if(std::find_if(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [sourcePortIdx](const auto& entry) { return entry.first == sourcePortIdx; }) == m_reduceStates.flags.cend()) {
@@ -519,13 +519,13 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
         }
 
         // Re-direct to all up-ports
-        for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             getUpPort(upPortIdx).pushOutgoing(std::make_unique<Messages::Reduce>(*msg));
         }
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
 {
     const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
 
@@ -564,7 +564,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             // Check if all down-ports have sent message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 // Send reduced message to all up-ports
-                for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
                     auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
@@ -639,7 +639,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             // Check if all up-ports have sent message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 // Send reduced message to all down-ports
-                for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                     auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
@@ -658,7 +658,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     static const auto compNodeAmount = Network::Constants::deriveComputingNodeAmount();
     static const auto downPortAmount = getDownPortAmount();
@@ -742,7 +742,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
 {
     spdlog::trace("Aggregate Switch({}): Gather message received from port #{}", m_ID, sourcePortIdx);
 
@@ -786,7 +786,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
     if(!msg) {
         spdlog::critical("Aggregate Switch({}): Received an empty all-gather message from source port #{}!", m_ID, sourcePortIdx);
@@ -815,7 +815,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 spdlog::trace("Aggregate Switch({}): All-gather message received from all down-ports! Re-directing..", m_ID);
 
-                for(std::size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
+                for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
                     auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
                     txMsg->m_data = state.value;
 
@@ -865,7 +865,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
             if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
                 spdlog::trace("Aggregate Switch({}): All-gather message received from all up-ports! Re-directing..", m_ID);
 
-                for(std::size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
+                for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                     auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
                     txMsg->m_data = state.value;
 
@@ -896,7 +896,7 @@ void Aggregate::process(const std::size_t sourcePortIdx, std::unique_ptr<Message
     }
 }
 
-void Aggregate::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+void Aggregate::redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 {
     if(!msg) {
         spdlog::error("Aggregate Switch({}): Received null message for redirection!", m_ID);
@@ -936,16 +936,16 @@ Network::Port &Aggregate::getAvailableUpPort()
     return *std::min_element(m_ports.begin(), m_ports.begin() + getUpPortAmount(), portSearchPolicy);
 }
 
-std::size_t Aggregate::getDownPortAmount() const
+size_t Aggregate::getDownPortAmount() const
 {
-    static const std::size_t downPortAmount = m_portAmount / 2;
+    static const size_t downPortAmount = m_portAmount / 2;
 
     return downPortAmount;
 }
 
-std::size_t Aggregate::getUpPortAmount() const
+size_t Aggregate::getUpPortAmount() const
 {
-    static const std::size_t upPortAmount = m_portAmount / 2;
+    static const size_t upPortAmount = m_portAmount / 2;
 
     return upPortAmount;
 }

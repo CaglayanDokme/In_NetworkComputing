@@ -34,7 +34,7 @@ namespace Network::Messages {
 
     class BaseMessage {
     public: /** Aliases **/
-        using Address = std::optional<std::size_t>;
+        using Address = std::optional<size_t>;
 
     protected: /** Construction **/
         BaseMessage() = delete;
@@ -53,7 +53,7 @@ namespace Network::Messages {
     class Acknowledge : public BaseMessage {
     public: /** Construction **/
         Acknowledge() = delete;
-        explicit Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType);
+        explicit Acknowledge(const size_t sourceID, const size_t destinationID, const e_Type ackType);
 
     public: /** Addressing **/
         const e_Type m_ackType;
@@ -62,7 +62,7 @@ namespace Network::Messages {
     class DirectMessage : public BaseMessage {
     public: /** Construction **/
         DirectMessage() = delete;
-        explicit DirectMessage(const std::size_t sourceID, const std::size_t destinationID);
+        explicit DirectMessage(const size_t sourceID, const size_t destinationID);
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -76,14 +76,14 @@ namespace Network::Messages {
          * @brief Construct a message to be broadcasted by in-network computing capable switches
          * @param sourceID ID of the source computing node
          */
-        explicit BroadcastMessage(const std::size_t sourceID);
+        explicit BroadcastMessage(const size_t sourceID);
 
         /**
          * @brief Construct a broadcast message to just be redirected by switches
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        explicit BroadcastMessage(const std::size_t sourceID, const std::size_t destinationID);
+        explicit BroadcastMessage(const size_t sourceID, const size_t destinationID);
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -97,14 +97,14 @@ namespace Network::Messages {
          * @brief Construct a barrier request message that will be responded by in-network computing capable switches
          * @param sourceID ID of the source computing node
          */
-        explicit BarrierRequest(const std::size_t sourceID);
+        explicit BarrierRequest(const size_t sourceID);
 
         /**
          * @brief Construct a barrier request message that will just be redirected by switches
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        explicit BarrierRequest(const std::size_t sourceID, const std::size_t destinationID);
+        explicit BarrierRequest(const size_t sourceID, const size_t destinationID);
     };
 
     class BarrierRelease : public BaseMessage {
@@ -119,7 +119,7 @@ namespace Network::Messages {
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        BarrierRelease(const std::size_t sourceID, const std::size_t destinationID);
+        BarrierRelease(const size_t sourceID, const size_t destinationID);
     };
 
     class Reduce : public BaseMessage {
@@ -134,7 +134,7 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          * @param opType        Operation to perform
          */
-        explicit Reduce(const std::size_t destinationID, const OpType opType);
+        explicit Reduce(const size_t destinationID, const OpType opType);
 
         /**
          * @brief Construct a reduce message that will just be redirected by switches
@@ -142,7 +142,7 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          * @param opType        Operation to perform
          */
-        explicit Reduce(const std::size_t sourceID, const std::size_t destinationID, const OpType opType);
+        explicit Reduce(const size_t sourceID, const size_t destinationID, const OpType opType);
 
     public: /** Data **/
         const OpType m_opType;
@@ -168,7 +168,7 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          * @param opType        Operation to perform
          */
-        explicit ReduceAll(const std::size_t sourceID, const std::size_t destinationID, const OpType opType);
+        explicit ReduceAll(const size_t sourceID, const size_t destinationID, const OpType opType);
 
     public: /** Data **/
         const OpType m_opType;
@@ -183,14 +183,14 @@ namespace Network::Messages {
          * @brief Construct a scatter message that will be processed by in-network computing capable switches
          * @param sourceID ID of the source computing node
          */
-        explicit Scatter(const std::size_t sourceID);
+        explicit Scatter(const size_t sourceID);
 
         /**
          * @brief Construct a scatter message that will just be redirected by switches
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        explicit Scatter(const std::size_t sourceID, const std::size_t destinationID);
+        explicit Scatter(const size_t sourceID, const size_t destinationID);
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -204,14 +204,14 @@ namespace Network::Messages {
          * @brief Construct a gather message that will be processed by in-network computing capable switches
          * @param destinationID ID of the destination computing node
          */
-        explicit Gather(const std::size_t destinationID);
+        explicit Gather(const size_t destinationID);
 
         /**
          * @brief Construct a gather message that will just be redirected by switches
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        explicit Gather(const std::size_t sourceID, const std::size_t destinationID);
+        explicit Gather(const size_t sourceID, const size_t destinationID);
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -226,7 +226,7 @@ namespace Network::Messages {
          * @param sourceID      ID of the source computing node
          * @param destinationID ID of the destination computing node
          */
-        explicit AllGather(const std::size_t sourceID, const std::size_t destinationID);
+        explicit AllGather(const size_t sourceID, const size_t destinationID);
 
     public: /** Data **/
         std::vector<float> m_data;

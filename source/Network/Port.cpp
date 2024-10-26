@@ -6,8 +6,8 @@
 using namespace Network;
 
 namespace PortDelays {
-    static constexpr std::size_t incomingMsg = 5;
-    static constexpr std::size_t outgoingMsg = 3;
+    static constexpr size_t incomingMsg = 5;
+    static constexpr size_t outgoingMsg = 3;
 }
 
 bool Port::operator==(const Port &port) const
@@ -104,7 +104,7 @@ Port::UniqueMsg Port::popIncoming()
     return msg;
 }
 
-std::size_t Port::outgoingAmount() const
+size_t Port::outgoingAmount() const
 {
     return m_outgoing.size();
 }

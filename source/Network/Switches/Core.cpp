@@ -4,32 +4,32 @@
 
 using namespace Network::Switches;
 
-Core::Core(const std::size_t portAmount)
+Core::Core(const size_t portAmount)
 : ISwitch(nextID++, portAmount)
 {
     spdlog::trace("Created core switch with ID #{}", m_ID);
 
     if(compNodePerPort == 0) {
-        compNodePerPort = std::size_t(std::pow(m_portAmount / 2, 2));
+        compNodePerPort = size_t(std::pow(m_portAmount / 2, 2));
     }
 
     // Initialize barrier requests
-    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx) {
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx) {
         m_barrierRequestFlags.insert({sourcePortIdx, false});
     }
 
     // Initialize reduce requests
-    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_reduceStates.flags.insert({sourcePortIdx, false});
     }
 
     // Initialize reduce-all requests
-    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_reduceAllStates.flags.insert({sourcePortIdx, false});
     }
 
     // Initialize all-gather requests
-    for(std::size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
+    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_allGatherStates.flags.insert({sourcePortIdx, false});
     }
 }
@@ -114,12 +114,12 @@ bool Core::tick()
     return true;
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)
 {
     redirect(sourcePortIdx, std::move(msg));
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Acknowledge> msg)
 {
     spdlog::trace("Core Switch({}): {} destined to computing node #{}.", m_ID, msg->typeToString(), msg->m_destinationID.value());
 
@@ -135,7 +135,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ac
     m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg)
 {
     spdlog::trace("Core Switch({}): Broadcast message received from port #{}", m_ID, sourcePortIdx);
 
@@ -150,7 +150,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Br
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg)
 {
     // Process message
     {
@@ -180,7 +180,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
 {
     // Process message
     {
@@ -267,7 +267,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
 {
     // Process message
     {
@@ -324,7 +324,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::Re
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     spdlog::trace("Core Switch({}): Scatter message received from port #{}", m_ID, sourcePortIdx);
 
@@ -360,7 +360,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
 {
     spdlog::trace("Core Switch({}): Inter-switch gather message received from port #{}", m_ID, sourcePortIdx);
 
@@ -382,7 +382,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
 
-void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg)
 {
     if(!msg) {
         spdlog::critical("Core Switch({}): Received empty inter-switch all-gather message from port #{}!", m_ID, sourcePortIdx);
@@ -436,7 +436,7 @@ void Core::process(const std::size_t sourcePortIdx, std::unique_ptr<Messages::In
     }
 }
 
-void Core::redirect(const std::size_t sourcePortIdx, Network::Port::UniqueMsg msg)
+void Core::redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 {
     if(!msg) {
         spdlog::error("Core Switch({}): Received null message for redirection!", m_ID);

@@ -61,7 +61,7 @@ namespace Network {
          * @brief  Get the amount of outgoing messages
          * @return Current amount of messages in the outgoing queue
          */
-        [[nodiscard]] std::size_t outgoingAmount() const;
+        [[nodiscard]] size_t outgoingAmount() const;
 
         /**
          * @brief Pop an incoming message from the port
@@ -88,10 +88,10 @@ namespace Network {
         Port *m_pRemotePort{nullptr};
 
         struct st_Msg {
-            st_Msg(UniqueMsg data, const std::size_t &delay);
+            st_Msg(UniqueMsg data, const size_t &delay);
 
             UniqueMsg data;
-            std::size_t remaining;  // Remaining ticks to fetch
+            size_t remaining;  // Remaining ticks to fetch
         };
 
         std::deque<st_Msg> m_incoming; // Messages from other ports

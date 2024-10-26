@@ -32,7 +32,7 @@ namespace Network {
         };
 
     public: /** Construction **/
-        MPI(const std::size_t ID);
+        MPI(const size_t ID);
 
         // Forbid copying
         MPI(const MPI &) = delete;
@@ -183,7 +183,7 @@ namespace Network {
         void send(Network::Port::UniqueMsg msg);
 
     private: /** Members **/
-        const std::size_t m_ID;
+        const size_t m_ID;
         Statistics m_statistics;
         Port m_port;
 

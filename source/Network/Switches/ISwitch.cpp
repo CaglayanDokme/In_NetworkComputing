@@ -22,7 +22,7 @@ namespace Network::Switches {
         return bNetworkComputing;
     }
 
-    ISwitch::ISwitch(const std::size_t ID, const std::size_t portAmount)
+    ISwitch::ISwitch(const size_t ID, const size_t portAmount)
     :   m_ID(ID),
         m_portAmount(portAmount),
         m_ports(m_portAmount)

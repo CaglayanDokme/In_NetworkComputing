@@ -14,7 +14,7 @@
 
 using namespace Network;
 
-MPI::MPI(const std::size_t ID)
+MPI::MPI(const size_t ID)
 : m_ID(ID)
 {
     spdlog::trace("MPI({}): Created", m_ID);
@@ -402,7 +402,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
         else {
             // Send the broadcast message to all computing nodes
             // TODO Can be optimized similar to the barrier
-            for(std::size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
+            for(size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
                 if(m_targetID == m_ID) {
                     continue;
                 }
@@ -568,12 +568,12 @@ void MPI::barrier()
         m_barrierRelease.messages.pop_back();
     }
     else {
-        static const std::size_t compNodeAmount    = Network::Constants::deriveComputingNodeAmount();
-        static const std::size_t compNodePerColumn = Network::Constants::getPortPerSwitch() / 2;
-        static const std::size_t compNodePerGroup  = compNodePerColumn * compNodePerColumn;
-        static const std::size_t compNodePerHalf   = compNodeAmount / 2;
-        static const std::size_t groupAmount       = compNodeAmount / compNodePerGroup;
-        static const std::size_t columnPerGroup    = compNodePerGroup / compNodePerColumn;
+        static const size_t compNodeAmount    = Network::Constants::deriveComputingNodeAmount();
+        static const size_t compNodePerColumn = Network::Constants::getPortPerSwitch() / 2;
+        static const size_t compNodePerGroup  = compNodePerColumn * compNodePerColumn;
+        static const size_t compNodePerHalf   = compNodeAmount / 2;
+        static const size_t groupAmount       = compNodeAmount / compNodePerGroup;
+        static const size_t columnPerGroup    = compNodePerGroup / compNodePerColumn;
 
         // Collect barrier requests
         {
@@ -674,7 +674,7 @@ void MPI::barrier()
                 // Wait for barrier request from the same in-group-offset node in the other groups of the left half
                 std::vector<size_t> sourceList;
 
-                for(std::size_t groupID = 1; groupID < (groupAmount / 2); ++groupID) {
+                for(size_t groupID = 1; groupID < (groupAmount / 2); ++groupID) {
                     const auto expectedSourceID = m_ID + (groupID * compNodePerGroup);
 
                     sourceList.push_back(expectedSourceID);
@@ -700,7 +700,7 @@ void MPI::barrier()
             if(m_ID < compNodePerColumn) {
                 // Wait for barrier request from the same in-column-offset node in the other columns of the first group
                 std::vector<size_t> sourceList;
-                for(std::size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
+                for(size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
                     const auto expectedSourceID = m_ID + (columnID * compNodePerColumn);
 
                     sourceList.push_back(expectedSourceID);
@@ -818,7 +818,7 @@ void MPI::barrier()
 
             if(0 == m_ID) {
                 // Send barrier release to all nodes in the same column
-                for(std::size_t m_targetID = 1; m_targetID < compNodePerColumn; ++m_targetID) {
+                for(size_t m_targetID = 1; m_targetID < compNodePerColumn; ++m_targetID) {
                     spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, m_targetID);
 
                     auto msg = std::make_unique<Messages::BarrierRelease>(m_ID, m_targetID);
@@ -835,7 +835,7 @@ void MPI::barrier()
 
             if(m_ID < compNodePerColumn) {
                 // Send barrier release to all same in-column-offset nodes in the same group
-                for(std::size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
+                for(size_t columnID = 1; columnID < columnPerGroup; ++columnID) {
                     const auto targetID = m_ID + (columnID * compNodePerColumn);
 
                     spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
@@ -856,7 +856,7 @@ void MPI::barrier()
                 // Send barrier release to all same in-group-offset nodes in the other groups of the left half
                 static const auto groupPerHalf = compNodePerHalf / compNodePerGroup;
 
-                for(std::size_t groupID = 1; groupID < groupPerHalf; ++groupID) {
+                for(size_t groupID = 1; groupID < groupPerHalf; ++groupID) {
                     const auto targetID = m_ID + (groupID * compNodePerGroup);
                     spdlog::trace("MPI({}): Sending barrier release to node #{}", m_ID, targetID);
 
@@ -1093,7 +1093,7 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
     else {
         // Send to all other nodes
         {
-            for(std::size_t m_targetID = 0; m_targetID < Network::Constants::deriveComputingNodeAmount(); ++m_targetID) {
+            for(size_t m_targetID = 0; m_targetID < Network::Constants::deriveComputingNodeAmount(); ++m_targetID) {
                 if(m_targetID == m_ID) {
                     continue;
                 }
@@ -1167,7 +1167,7 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
     data = temp.at(0);
 }
 
-void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
+void MPI::scatter(std::vector<float> &data, const size_t sourceID)
 {
     spdlog::trace("MPI({}): Scattering data from {}", m_ID, sourceID);
 
@@ -1199,7 +1199,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
         else {
             // Send the scatter message to all computing nodes
             // TODO Can be optimized similar to the barrier
-            for(std::size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
+            for(size_t m_targetID = 0; m_targetID < compNodeAmount; ++m_targetID) {
                 if(m_targetID == m_ID) {
                     continue;
                 }
@@ -1284,7 +1284,7 @@ void MPI::scatter(std::vector<float> &data, const std::size_t sourceID)
     }
 }
 
-void MPI::gather(std::vector<float> &data, const std::size_t destinationID)
+void MPI::gather(std::vector<float> &data, const size_t destinationID)
 {
     spdlog::trace("MPI({}): Gathering data at {}", m_ID, destinationID);
 

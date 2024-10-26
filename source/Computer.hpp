@@ -23,7 +23,7 @@ public: /** Methods **/
      *
      * @attention This function must be called once prior to spawning any computing node.
      */
-    static void setTotalAmount(const std::size_t totalAmount);
+    static void setTotalAmount(const size_t totalAmount);
 
     [[nodiscard]] bool tick();
 
@@ -31,7 +31,7 @@ public: /** Methods **/
      * @brief  Get the unique ID of the computing node.
      * @return Unique ID computing nodes
      */
-    [[nodiscard]] std::size_t getID() const { return m_ID; }
+    [[nodiscard]] size_t getID() const { return m_ID; }
 
     /**
      * @brief  Get the port of the computing node
@@ -58,13 +58,13 @@ private:
     void task();
 
 private: /** Members **/
-    const std::size_t m_ID;
+    const size_t m_ID;
     Network::MPI m_mpi;
     std::thread m_task;
     std::once_flag m_tickStarted;
     bool m_bDone{false};
 
     // Static
-    inline static std::size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
-    inline static std::size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
+    inline static size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
+    inline static size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
 };

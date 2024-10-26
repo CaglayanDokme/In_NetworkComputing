@@ -14,7 +14,7 @@ const std::string & BaseMessage::typeToString() const
     return toString(m_eType);
 }
 
-Acknowledge::Acknowledge(const std::size_t sourceID, const std::size_t destinationID, const e_Type ackType)
+Acknowledge::Acknowledge(const size_t sourceID, const size_t destinationID, const e_Type ackType)
 : BaseMessage(e_Type::Acknowledge, sourceID, destinationID), m_ackType(ackType)
 {
     if(e_Type::Acknowledge == m_ackType) {
@@ -22,19 +22,19 @@ Acknowledge::Acknowledge(const std::size_t sourceID, const std::size_t destinati
     }
 }
 
-DirectMessage::DirectMessage(const std::size_t sourceID, const std::size_t destinationID)
+DirectMessage::DirectMessage(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::DirectMessage, sourceID, destinationID), m_data()
 {
     // Nothing
 }
 
-BroadcastMessage::BroadcastMessage(const std::size_t sourceID)
+BroadcastMessage::BroadcastMessage(const size_t sourceID)
 : BaseMessage(e_Type::BroadcastMessage, sourceID)
 {
     // Nothing
 }
 
-BroadcastMessage::BroadcastMessage(const std::size_t sourceID, const std::size_t destinationID)
+BroadcastMessage::BroadcastMessage(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::BroadcastMessage, sourceID, destinationID)
 {
     // Nothing
@@ -46,13 +46,13 @@ BarrierRequest::BarrierRequest()
     // Nothing
 }
 
-BarrierRequest::BarrierRequest(const std::size_t sourceID)
+BarrierRequest::BarrierRequest(const size_t sourceID)
 : BaseMessage(e_Type::BarrierRequest, sourceID)
 {
     // Nothing
 }
 
-BarrierRequest::BarrierRequest(const std::size_t sourceID, const std::size_t destinationID)
+BarrierRequest::BarrierRequest(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::BarrierRequest, sourceID, destinationID)
 {
     // Nothing
@@ -64,19 +64,19 @@ BarrierRelease::BarrierRelease()
     // Nothing
 }
 
-BarrierRelease::BarrierRelease(const std::size_t sourceID, const std::size_t destinationID)
+BarrierRelease::BarrierRelease(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::BarrierRelease, sourceID, destinationID)
 {
     // Nothing
 }
 
-Reduce::Reduce(const std::size_t destinationID, const OpType opType)
+Reduce::Reduce(const size_t destinationID, const OpType opType)
 : BaseMessage(e_Type::Reduce, std::nullopt, destinationID), m_opType(opType)
 {
     // Nothing
 }
 
-Reduce::Reduce(const std::size_t sourceID, const std::size_t destinationID, const OpType opType)
+Reduce::Reduce(const size_t sourceID, const size_t destinationID, const OpType opType)
 : BaseMessage(e_Type::Reduce, sourceID, destinationID), m_opType(opType)
 {
     // Nothing
@@ -88,31 +88,31 @@ ReduceAll::ReduceAll(const OpType opType)
     // Nothing
 }
 
-ReduceAll::ReduceAll(const std::size_t sourceID, const std::size_t destinationID, const OpType opType)
+ReduceAll::ReduceAll(const size_t sourceID, const size_t destinationID, const OpType opType)
 : BaseMessage(e_Type::ReduceAll, sourceID, destinationID), m_opType(opType)
 {
     // Nothing
 }
 
-Scatter::Scatter(const std::size_t sourceID)
+Scatter::Scatter(const size_t sourceID)
 : BaseMessage(e_Type::Scatter, sourceID)
 {
     // Nothing
 }
 
-Scatter::Scatter(const std::size_t sourceID, const std::size_t destinationID)
+Scatter::Scatter(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::Scatter, sourceID, destinationID)
 {
     // Nothing
 }
 
-Gather::Gather(const std::size_t destinationID)
+Gather::Gather(const size_t destinationID)
 : BaseMessage(e_Type::Gather, std::nullopt, destinationID)
 {
     // Nothing
 }
 
-Gather::Gather(const std::size_t sourceID, const std::size_t destinationID)
+Gather::Gather(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::Gather, sourceID, destinationID)
 {
     // Nothing
@@ -124,7 +124,7 @@ AllGather::AllGather()
     // Nothing
 }
 
-AllGather::AllGather(const std::size_t sourceID, const std::size_t destinationID)
+AllGather::AllGather(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::AllGather, sourceID, destinationID)
 {
     // Nothing
