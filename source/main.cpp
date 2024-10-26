@@ -323,6 +323,15 @@ int main(const int argc, const char *const argv[])
             return maxReleaseTime - minReleaseTime;
         }();
 
+        if (ofs.tellp() == 0) {
+            ofs << "INC" << ','
+                << "Ports" << ','
+                << "CompNodes" << ','
+                << "TimingCost" << ','
+                << "BandwidthUsage" << ','
+                << "SyncDiff" << '\n';
+        }
+
         ofs << (bInNetworkComputing ? 1 : 0) << ','
             << portPerSwitch << ','
             << compNodeAmount << ','
