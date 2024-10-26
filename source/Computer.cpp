@@ -22,7 +22,7 @@ Computer::Computer()
     }
 }
 
-void Computer::setTotalAmount(const std::size_t totalAmount)
+void Computer::setTotalAmount(const size_t totalAmount)
 {
     if((0 != computingNodeAmount) && (totalAmount != computingNodeAmount)) {
         spdlog::critical("Computing node amount was set to({}) before!", computingNodeAmount);
@@ -45,6 +45,10 @@ bool Computer::tick()
     // Advance port
     m_mpi.tick();
 
+    if(m_ID == (computingNodeAmount - 1)) {
+        ++currentTick;
+    }
+
     return true;
 }
 
@@ -56,6 +60,10 @@ bool Computer::isReady() const
 void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
+
+    m_statistics.lastBarrierRequestTime = currentTick;
+    m_mpi.barrier();
+    m_statistics.lastBarrierReleaseTime = currentTick;
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_bDone = true;

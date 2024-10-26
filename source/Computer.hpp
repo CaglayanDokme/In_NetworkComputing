@@ -5,6 +5,12 @@
 #include <thread>
 
 class Computer {
+public: /** Struct Declarations **/
+    struct Statistics {
+        size_t lastBarrierRequestTime; // Time of the last barrier request (Synchronization start time)
+        size_t lastBarrierReleaseTime; // Time of the last barrier release (Synchronization end time)
+    };
+
 public: /** Construction **/
     Computer();
 
@@ -51,6 +57,12 @@ public: /** Methods **/
      */
     [[nodiscard]] bool isDone() const { return m_bDone; }
 
+    /**
+     * @brief  Get the statistics of the computing node
+     * @return Object containing the statistics
+     */
+    [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
+
 private:
     /**
      * @brief Main computing logic of the computing node
@@ -59,12 +71,15 @@ private:
 
 private: /** Members **/
     const size_t m_ID;
+
     Network::MPI m_mpi;
     std::thread m_task;
     std::once_flag m_tickStarted;
+    Statistics m_statistics;
     bool m_bDone{false};
 
     // Static
     inline static size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
     inline static size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
+    inline static size_t currentTick = 0;          // Current tick of the simulation
 };
