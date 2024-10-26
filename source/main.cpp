@@ -324,6 +324,7 @@ int main(const int argc, const char *const argv[])
         }();
 
         ofs << (bInNetworkComputing ? 1 : 0) << ','
+            << portPerSwitch << ','
             << compNodeAmount << ','
             << timingCost << ','
             << bandwidthUsage << ','
