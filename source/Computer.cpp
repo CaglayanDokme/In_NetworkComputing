@@ -61,6 +61,26 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    static const size_t sourceNode = std::rand() % computingNodeAmount;
+
+    std::vector<float> data;
+
+    if(sourceNode == m_ID) {
+        for (std::size_t i = 0; i < computingNodeAmount; ++i) {
+            data.push_back(static_cast<float>(i));
+        }
+    }
+
+    m_statistics.lastBroadcastStartTime = currentTick;
+    m_mpi.broadcast(data, sourceNode);
+    m_statistics.lastBroadcastCompletionTime = currentTick;
+
+    if(data.size() != computingNodeAmount) {
+        spdlog::error("Computer({}): Couldn't broadcast data!", m_ID);
+
+        throw std::runtime_error("Couldn't broadcast data!");
+    }
+
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_bDone = true;
 
