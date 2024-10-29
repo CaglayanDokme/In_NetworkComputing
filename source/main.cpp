@@ -3,6 +3,11 @@
 #include "cxxopts.hpp"
 #include <vector>
 
+// Standard libraries
+#include <vector>
+#include <fstream>
+#include <filesystem>
+
 // User-defined
 #include "Network/Switches/Aggregate.hpp"
 #include "Network/Switches/Core.hpp"
@@ -274,6 +279,67 @@ int main(const int argc, const char *const argv[])
     }
 
     spdlog::warn("Program finished after {} ticks!", tick);
+
+    // Record the results
+    do {
+        const auto resultFile = std::filesystem::current_path() / "result.csv";
+
+        std::ofstream ofs(resultFile, std::ios::app);
+        if(!ofs.is_open()) {
+            spdlog::error("Couldn't open result file!");
+            spdlog::debug("File path: {}", resultFile.string());
+
+            break;
+        }
+
+        const auto timingCost = tick;
+        const auto bandwidthUsage = [&]() {
+            size_t totalUsage = 0;
+
+            for(const auto &sw : coreSwitches) {
+                totalUsage += sw.getStatistics().totalProcessedMessages;
+            }
+
+            for(const auto &sw : aggSwitches) {
+                totalUsage += sw.getStatistics().totalProcessedMessages;
+            }
+
+            for(const auto &sw : edgeSwitches) {
+                totalUsage += sw.getStatistics().totalProcessedMessages;
+            }
+
+            return totalUsage;
+        }();
+        const auto timeDiff = [&]() {
+            size_t maxCompletionTime = 0;
+            size_t minCompletionTime = std::numeric_limits<size_t>::max();
+
+            for(const auto &compNode : computeNodes) {
+                maxCompletionTime = std::max(maxCompletionTime, compNode.getStatistics().lastBroadcastCompletionTime);
+                minCompletionTime = std::min(minCompletionTime, compNode.getStatistics().lastBroadcastStartTime);
+            }
+
+            spdlog::trace("Max completion time: {}, Min completion time: {}", maxCompletionTime, minCompletionTime);
+
+            return maxCompletionTime - minCompletionTime;
+        }();
+
+        if (ofs.tellp() == 0) {
+            ofs << "INC" << ','
+                << "Ports" << ','
+                << "CompNodes" << ','
+                << "TimingCost" << ','
+                << "BandwidthUsage" << ','
+                << "ComplTimeDiff" << '\n';
+        }
+
+        ofs << (bInNetworkComputing ? 1 : 0) << ','
+            << portPerSwitch << ','
+            << compNodeAmount << ','
+            << timingCost << ','
+            << bandwidthUsage << ','
+            << timeDiff << '\n';
+    } while(false);
 
     return 0;
 }
