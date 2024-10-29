@@ -45,6 +45,10 @@ bool Computer::tick()
     // Advance port
     m_mpi.tick();
 
+    if(m_ID == (computingNodeAmount - 1)) {
+        ++currentTick;
+    }
+
     return true;
 }
 

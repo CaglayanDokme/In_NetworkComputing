@@ -67,4 +67,5 @@ private: /** Members **/
     // Static
     inline static size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
     inline static size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
+    inline static size_t currentTick = 0;          // Current time of the simulation
 };
