@@ -422,7 +422,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             acks.at(m_ID) = true; // Skip the broadcaster
 
             {
-                std::remove_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [&](auto &&msg) {
+                std::erase_if(m_acknowledge.messages, [&](auto &&msg) {
                     if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
                         return false;
                     }
