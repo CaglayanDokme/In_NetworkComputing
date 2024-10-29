@@ -5,6 +5,12 @@
 #include <thread>
 
 class Computer {
+public: /** Struct Declarations **/
+    struct Statistics {
+        size_t lastBroadcastStartTime;
+        size_t lastBroadcastCompletionTime;
+    };
+
 public: /** Construction **/
     Computer();
 
@@ -51,6 +57,12 @@ public: /** Methods **/
      */
     [[nodiscard]] bool isDone() const { return m_bDone; }
 
+    /**
+     * @brief  Get the statistics of the computing node
+     * @return Object containing the statistics
+     */
+    [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
+
 private:
     /**
      * @brief Main computing logic of the computing node
@@ -61,6 +73,7 @@ private: /** Members **/
     const size_t m_ID;
     Network::MPI m_mpi;
     std::thread m_task;
+    Statistics m_statistics;
     std::once_flag m_tickStarted;
     bool m_bDone{false};
 
