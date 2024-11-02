@@ -25,6 +25,10 @@ void MPI::tick()
     // Advance port
     m_port.tick();
 
+    if(m_ID == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+        ++currentTick;
+    }
+
     if(!m_port.hasIncoming()) {
         return;
     }

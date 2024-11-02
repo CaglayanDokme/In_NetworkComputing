@@ -197,5 +197,7 @@ namespace Network {
         StateHolder<Messages::AllGather> m_allGather;
         StateHolder<Messages::BarrierRequest> m_barrierRequest;
         StateHolder<Messages::BarrierRelease> m_barrierRelease;
+
+        inline static size_t currentTick = 0;
     };
 };
