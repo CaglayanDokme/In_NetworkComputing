@@ -36,7 +36,7 @@ void MPI::tick()
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
-    ++m_statistics.totalReceivedMessages;
+    ++m_statistics.total.received;
 
     if(anyMsg->m_destinationID.has_value()) {
         if(anyMsg->m_destinationID.value() != m_ID) {
@@ -67,6 +67,8 @@ void MPI::tick()
 
             m_acknowledge.notifier.notify_all();
 
+            ++m_statistics.acknowledge.received;
+
             break;
         }
         case Messages::e_Type::DirectMessage: {
@@ -81,6 +83,8 @@ void MPI::tick()
 
             m_directReceive.notifier.notify_all();
 
+            ++m_statistics.directMsg.received;
+
             break;
         }
         case Messages::e_Type::BroadcastMessage: {
@@ -94,6 +98,8 @@ void MPI::tick()
             }
 
             m_broadcastReceive.notifier.notify_all();
+
+            ++m_statistics.broadcast.received;
 
             break;
         }
@@ -115,6 +121,8 @@ void MPI::tick()
 
             m_barrierRequest.notifier.notify_all();
 
+            ++m_statistics.barrierReq.received;
+
             break;
         }
         case Messages::e_Type::BarrierRelease: {
@@ -134,6 +142,8 @@ void MPI::tick()
 
             m_barrierRelease.notifier.notify_all();
 
+            ++m_statistics.barrierRel.received;
+
             break;
         }
         case Messages::e_Type::Reduce: {
@@ -147,6 +157,8 @@ void MPI::tick()
             }
 
             m_reduce.notifier.notify_all();
+
+            ++m_statistics.reduce.received;
 
             break;
         }
@@ -162,6 +174,8 @@ void MPI::tick()
 
             m_reduceAll.notifier.notify_all();
 
+            ++m_statistics.reduceAll.received;
+
             break;
         }
         case Messages::e_Type::Scatter: {
@@ -175,6 +189,8 @@ void MPI::tick()
             }
 
             m_scatter.notifier.notify_all();
+
+            ++m_statistics.scatter.received;
 
             break;
         }
@@ -190,6 +206,8 @@ void MPI::tick()
 
             m_gather.notifier.notify_all();
 
+            ++m_statistics.gather.received;
+
             break;
         }
         case Messages::e_Type::AllGather: {
@@ -204,10 +222,14 @@ void MPI::tick()
 
             m_allGather.notifier.notify_all();
 
+            ++m_statistics.allGather.received;
+
             break;
         }
         default:  {
             spdlog::critical("MPI({}): Received unknown message type!", m_ID);
+
+            ++m_statistics.unknown.received;
 
             throw std::runtime_error("MPI: Unknown message type!");
         }
@@ -1582,5 +1604,43 @@ void MPI::allGather(std::vector<float> &data)
 void MPI::send(Network::Port::UniqueMsg msg)
 {
     m_port.pushOutgoing(std::move(msg));
-    ++m_statistics.totalSentMessages;
+
+    ++m_statistics.total.sent;
+    switch(msg->m_eType) {
+        case Messages::e_Type::Acknowledge:
+            ++m_statistics.acknowledge.sent;
+            break;
+        case Messages::e_Type::DirectMessage:
+            ++m_statistics.directMsg.sent;
+            break;
+        case Messages::e_Type::BroadcastMessage:
+            ++m_statistics.broadcast.sent;
+            break;
+        case Messages::e_Type::BarrierRequest:
+            ++m_statistics.barrierReq.sent;
+            break;
+        case Messages::e_Type::BarrierRelease:
+            ++m_statistics.barrierRel.sent;
+            break;
+        case Messages::e_Type::Reduce:
+            ++m_statistics.reduce.sent;
+            break;
+        case Messages::e_Type::ReduceAll:
+            ++m_statistics.reduceAll.sent;
+            break;
+        case Messages::e_Type::Scatter:
+            ++m_statistics.scatter.sent;
+            break;
+        case Messages::e_Type::Gather:
+            ++m_statistics.gather.sent;
+            break;
+        case Messages::e_Type::AllGather:
+            ++m_statistics.allGather.sent;
+            break;
+        default:
+            spdlog::warn("MPI({}): Unknown message type({}) sent!", m_ID, int(msg->m_eType));
+            ++m_statistics.unknown.sent;
+
+            break;
+    }
 }

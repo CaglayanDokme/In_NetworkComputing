@@ -27,8 +27,23 @@ namespace Network {
 
     public: /** Struct Declarations **/
         struct Statistics {
-            size_t totalSentMessages;
-            size_t totalReceivedMessages;
+            struct MsgBased {
+                size_t sent;
+                size_t received;
+            };
+
+            MsgBased total;
+            MsgBased acknowledge;
+            MsgBased directMsg;
+            MsgBased broadcast;
+            MsgBased barrierReq;
+            MsgBased barrierRel;
+            MsgBased reduce;
+            MsgBased reduceAll;
+            MsgBased scatter;
+            MsgBased gather;
+            MsgBased allGather;
+            MsgBased unknown;
         };
 
     public: /** Construction **/
