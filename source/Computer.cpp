@@ -61,6 +61,24 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    static const size_t sourceNode = std::rand() % computingNodeAmount;
+
+    std::vector<float> data;
+
+    if(sourceNode == m_ID) {
+        for (std::size_t i = 0; i < computingNodeAmount; ++i) {
+            data.push_back(static_cast<float>(i));
+        }
+    }
+
+    m_mpi.scatter(data, sourceNode);
+
+    if(data.size() != 1) {
+        spdlog::error("Computer({}): Data size({}) is not 1!", m_ID, data.size());
+
+        throw std::runtime_error("Data size is not 1!");
+    }
+
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_bDone = true;
 
