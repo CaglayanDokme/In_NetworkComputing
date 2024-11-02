@@ -292,7 +292,19 @@ int main(const int argc, const char *const argv[])
             break;
         }
 
-        const auto timingCost = tick;
+        const auto timingCost = [&]() {
+            size_t totalCost = 0;
+
+            size_t minStartTime = std::numeric_limits<size_t>::max();
+            size_t maxCompletionTime = 0;
+
+            for(const auto &compNode : computeNodes) {
+                maxCompletionTime = std::max(maxCompletionTime, compNode.getStatistics().lastBroadcastCompletionTime);
+                minStartTime      = std::min(minStartTime, compNode.getStatistics().lastBroadcastStartTime);
+            }
+
+            return (maxCompletionTime - minStartTime);
+        }();
         const auto bandwidthUsage = [&]() {
             size_t totalUsage = 0;
 
