@@ -316,7 +316,7 @@ int main(const int argc, const char *const argv[])
 
             for(const auto &compNode : computeNodes) {
                 maxCompletionTime = std::max(maxCompletionTime, compNode.getStatistics().lastBroadcastCompletionTime);
-                minCompletionTime = std::min(minCompletionTime, compNode.getStatistics().lastBroadcastStartTime);
+                minCompletionTime = std::min(minCompletionTime, compNode.getStatistics().lastBroadcastCompletionTime);
             }
 
             spdlog::trace("Max completion time: {}, Min completion time: {}", maxCompletionTime, minCompletionTime);
