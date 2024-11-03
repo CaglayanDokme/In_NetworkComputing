@@ -45,6 +45,9 @@ bool Computer::tick()
     // Advance port
     m_mpi.tick();
 
+    // Synchronize statistics
+    m_statistics.mpi = m_mpi.getStatistics();
+
     if(m_ID == (computingNodeAmount - 1)) {
         ++currentTick;
     }
@@ -71,9 +74,7 @@ void Computer::task()
         }
     }
 
-    m_statistics.lastBroadcastStartTime = currentTick;
     m_mpi.broadcast(data, sourceNode);
-    m_statistics.lastBroadcastCompletionTime = currentTick;
 
     if(data.size() != computingNodeAmount) {
         spdlog::error("Computer({}): Couldn't broadcast data!", m_ID);
@@ -82,6 +83,7 @@ void Computer::task()
     }
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
+    m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
 
     for( ; true; sleep(1));

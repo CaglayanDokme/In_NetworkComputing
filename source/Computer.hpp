@@ -6,9 +6,8 @@
 
 class Computer {
 public: /** Struct Declarations **/
-    struct Statistics {
-        size_t lastBroadcastStartTime;
-        size_t lastBroadcastCompletionTime;
+    struct Statistics  {
+        Network::MPI::Statistics mpi;
     };
 
 public: /** Construction **/
