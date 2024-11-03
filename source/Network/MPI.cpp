@@ -413,6 +413,8 @@ void MPI::receive(float &data, const size_t sourceID)
 
 void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 {
+    m_statistics.broadcast.lastStart_tick = currentTick;
+
     if(m_ID == sourceID) {
         spdlog::trace("MPI({}): Broadcasting..", m_ID);
 
@@ -557,6 +559,8 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
+
+    m_statistics.broadcast.lastEnd_tick = currentTick;
 }
 
 void MPI::broadcast(float &data, const size_t sourceID)
