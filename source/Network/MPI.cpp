@@ -1093,6 +1093,8 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
 
 void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 {
+    m_statistics.reduceAll.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Reducing data", m_ID);
 
     if(Network::Switches::isNetworkComputingEnabled()) {
@@ -1195,6 +1197,8 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
             m_reduceAll.messages.clear();
         }
     }
+
+    m_statistics.reduceAll.lastEnd_tick = currentTick;
 }
 
 void MPI::reduceAll(float &data, const ReduceOp operation)
