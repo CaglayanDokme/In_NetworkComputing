@@ -64,9 +64,7 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
-    m_statistics.lastBarrierRequestTime = currentTick;
     m_mpi.barrier();
-    m_statistics.lastBarrierReleaseTime = currentTick;
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_bDone = true;
