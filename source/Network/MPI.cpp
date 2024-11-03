@@ -121,7 +121,7 @@ void MPI::tick()
 
             m_barrierRequest.notifier.notify_all();
 
-            ++m_statistics.barrierReq.received;
+            ++m_statistics.barrier.received;
 
             break;
         }
@@ -142,7 +142,7 @@ void MPI::tick()
 
             m_barrierRelease.notifier.notify_all();
 
-            ++m_statistics.barrierRel.received;
+            ++m_statistics.barrier.received;
 
             break;
         }
@@ -587,6 +587,8 @@ void MPI::broadcast(float &data, const size_t sourceID)
 
 void MPI::barrier()
 {
+    m_statistics.barrier.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Barrier", m_ID);
 
     if(Network::Switches::isNetworkComputingEnabled()) {
@@ -926,6 +928,8 @@ void MPI::barrier()
     }
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
+
+    m_statistics.barrier.lastEnd_tick = currentTick;
 }
 
 void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID)
@@ -1627,10 +1631,9 @@ void MPI::send(Network::Port::UniqueMsg msg)
             ++m_statistics.broadcast.sent;
             break;
         case Messages::e_Type::BarrierRequest:
-            ++m_statistics.barrierReq.sent;
-            break;
+            [[fallthrough]];
         case Messages::e_Type::BarrierRelease:
-            ++m_statistics.barrierRel.sent;
+            ++m_statistics.barrier.sent;
             break;
         case Messages::e_Type::Reduce:
             ++m_statistics.reduce.sent;

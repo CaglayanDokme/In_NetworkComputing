@@ -40,8 +40,7 @@ namespace Network {
             MsgBased acknowledge;
             MsgBased directMsg;
             MsgBased broadcast;
-            MsgBased barrierReq;
-            MsgBased barrierRel;
+            MsgBased barrier;
             MsgBased reduce;
             MsgBased reduceAll;
             MsgBased scatter;
