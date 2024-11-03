@@ -67,6 +67,7 @@ void Computer::task()
     m_mpi.barrier();
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
+    m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
 
     for( ; true; sleep(1));
