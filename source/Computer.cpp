@@ -64,6 +64,19 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    std::vector<float> data;
+    data.push_back(m_ID);
+
+    m_mpi.reduceAll(data, Network::MPI::ReduceOp::Max);
+
+    if(data.size() != 1) {
+        spdlog::error("Data size({}) is invalid!", data.size());
+    }
+
+    if(static_cast<size_t>(data.at(0)) != (computingNodeAmount - 1)) {
+        spdlog::error("Data({}) is invalid! Expected {}", data.at(0), computingNodeAmount - 1);
+    }
+
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
