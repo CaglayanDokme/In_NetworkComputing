@@ -30,6 +30,10 @@ namespace Network {
             struct MsgBased {
                 size_t sent;
                 size_t received;
+
+                size_t lastStart_tick;
+                size_t lastEnd_tick;
+                size_t lastDuration() const { return lastEnd_tick - lastStart_tick; }
             };
 
             MsgBased total;
