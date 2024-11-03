@@ -1,9 +1,6 @@
 // Libraries
 #include "spdlog/spdlog.h"
 #include "cxxopts.hpp"
-#include <filesystem>
-#include <fstream>
-#include <vector>
 
 // Standard libraries
 #include <vector>
