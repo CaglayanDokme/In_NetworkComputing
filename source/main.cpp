@@ -293,13 +293,63 @@ int main(const int argc, const char *const argv[])
                 << ',' << "Ports"
                 << ',' << "CompNodes"
                 << ',' << "TotalTicks"
+
+                << ',' << "TimingCost"
+                << ',' << "BandwidthUsage"
+                << ',' << "ComplTimeDiff"
+
                 << '\n';
     }
+
+    const auto timingCost = [&]() {
+        size_t maxDuration = 0;
+
+        for(auto &compNode : computeNodes) {
+            maxDuration = std::max(maxDuration, compNode.getStatistics().mpi.gather.lastDuration());
+        }
+
+        return maxDuration;
+    }();
+    const auto bandwidthUsage = [&]() {
+        size_t totalUsage = 0;
+
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        return totalUsage;
+    }();
+    const auto complTimeDiff = [&]() {
+        size_t maxComplTime = 0;
+        size_t minComplTime = std::numeric_limits<size_t>::max();
+
+        for(auto &compNode : computeNodes) {
+            maxComplTime = std::max(maxComplTime, compNode.getStatistics().mpi.gather.lastEnd_tick);
+            minComplTime = std::min(minComplTime, compNode.getStatistics().mpi.gather.lastEnd_tick);
+        }
+
+        spdlog::trace("Max completion time: {}, Min completion time: {}", maxComplTime, minComplTime);
+
+        return maxComplTime - minComplTime;
+    }();
 
     csvFile << (bInNetworkComputing ? "1" : "0")
             << ',' << portPerSwitch
             << ',' << compNodeAmount
             << ',' << tick
+
+            << ',' << timingCost
+            << ',' << bandwidthUsage
+            << ',' << complTimeDiff
+
             << '\n';
 
     return 0;
