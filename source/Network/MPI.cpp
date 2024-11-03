@@ -1219,6 +1219,8 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
 
 void MPI::scatter(std::vector<float> &data, const size_t sourceID)
 {
+    m_statistics.scatter.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Scattering data from {}", m_ID, sourceID);
 
     if(m_ID == sourceID) {
@@ -1275,63 +1277,67 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("Receive destination must be empty!");
         }
 
-        std::unique_lock lock(m_scatter.mutex);
+        do {
+            std::unique_lock lock(m_scatter.mutex);
 
-        bool bAlreadyReceived = false;
+            bool bAlreadyReceived = false;
 
-        // Check the already queued messages
-        if(!m_scatter.messages.empty()) {
-            auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
-                return (msg->m_sourceID.value() == sourceID);
-            });
+            // Check the already queued messages
+            if(!m_scatter.messages.empty()) {
+                auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
+                    return (msg->m_sourceID.value() == sourceID);
+                });
 
-            if(msgIterator != m_scatter.messages.cend()) {
-                auto &msg = *msgIterator->get();
-                spdlog::trace("MPI({}): Received scatter message from computing node #{}", m_ID, msg.m_sourceID.value());
+                if(msgIterator != m_scatter.messages.cend()) {
+                    auto &msg = *msgIterator->get();
+                    spdlog::trace("MPI({}): Received scatter message from computing node #{}", m_ID, msg.m_sourceID.value());
 
-                data = std::move(msg.m_data);
-                m_scatter.messages.erase(msgIterator);
+                    data = std::move(msg.m_data);
+                    m_scatter.messages.erase(msgIterator);
 
-                return;
-            }
-        }
-
-        size_t omittedMsgAmount = m_scatter.messages.size();
-        if(omittedMsgAmount > 0) {
-            spdlog::debug("MPI({}): Omitted {} messages for scatter..", m_ID, omittedMsgAmount);
-        }
-
-        // Wait for the message
-        while(!bAlreadyReceived) {
-            if(m_scatter.messages.size() <= omittedMsgAmount) {
-                m_scatter.notifier.wait(lock, [&]() { return (m_scatter.messages.size() > omittedMsgAmount); });
+                    break;
+                }
             }
 
-            auto &msg = *m_scatter.messages.at(omittedMsgAmount);
+            size_t omittedMsgAmount = m_scatter.messages.size();
+            if(omittedMsgAmount > 0) {
+                spdlog::debug("MPI({}): Omitted {} messages for scatter..", m_ID, omittedMsgAmount);
+            }
 
-            if(msg.m_sourceID.value() != sourceID) {
-                spdlog::warn("MPI({}): Received scatter message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
-
-                if(0 != omittedMsgAmount) {
-                    std::string omittedSourceIDs;
-                    for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
-                        omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
-                    }
-
-                    spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+            // Wait for the message
+            while(!bAlreadyReceived) {
+                if(m_scatter.messages.size() <= omittedMsgAmount) {
+                    m_scatter.notifier.wait(lock, [&]() { return (m_scatter.messages.size() > omittedMsgAmount); });
                 }
 
-                continue;
+                auto &msg = *m_scatter.messages.at(omittedMsgAmount);
+
+                if(msg.m_sourceID.value() != sourceID) {
+                    spdlog::warn("MPI({}): Received scatter message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
+
+                    if(0 != omittedMsgAmount) {
+                        std::string omittedSourceIDs;
+                        for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                            omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                        }
+
+                        spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                    }
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
+
+                data = std::move(msg.m_data);
+                m_scatter.messages.erase(m_scatter.messages.begin() + omittedMsgAmount);
+
+                break;
             }
-
-            spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
-
-            data = std::move(msg.m_data);
-            m_scatter.messages.erase(m_scatter.messages.begin() + omittedMsgAmount);
-
-            break;
-        }
+        } while(false);
     }
+
+    m_statistics.scatter.lastEnd_tick = currentTick;
 }
 
 void MPI::gather(std::vector<float> &data, const size_t destinationID)
