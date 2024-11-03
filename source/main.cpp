@@ -291,7 +291,15 @@ int main(const int argc, const char *const argv[])
             break;
         }
 
-        const auto timingCost = tick;
+        const auto timingCost = [&]() {
+            size_t maxDuration = 0;
+
+            for(auto &compNode : computeNodes) {
+                maxDuration = std::max(maxDuration, compNode.getStatistics().mpi.barrier.lastDuration());
+            }
+
+            return maxDuration;
+        }();
         const auto bandwidthUsage = [&]() {
             size_t totalUsage = 0;
 
@@ -313,9 +321,9 @@ int main(const int argc, const char *const argv[])
             size_t maxReleaseTime = 0;
             size_t minReleaseTime = std::numeric_limits<size_t>::max();
 
-            for(const auto &compNode : computeNodes) {
-                maxReleaseTime = std::max(maxReleaseTime, compNode.getStatistics().lastBarrierReleaseTime);
-                minReleaseTime = std::min(minReleaseTime, compNode.getStatistics().lastBarrierReleaseTime);
+            for(auto &compNode : computeNodes) {
+                maxReleaseTime = std::max(maxReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
+                minReleaseTime = std::min(minReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
             }
 
             spdlog::trace("Max release time: {}, Min release time: {}", maxReleaseTime, minReleaseTime);
