@@ -64,6 +64,30 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    static const size_t targetNode = std::rand() % computingNodeAmount;
+
+    std::vector<float> data;
+
+    data.push_back(m_ID);
+
+    m_mpi.gather(data, targetNode);
+
+    if(m_ID == targetNode) {
+        if(data.size() != computingNodeAmount) {
+            spdlog::error("Data size({}) is not equal to the total amount of computing nodes({})!", data.size(), computingNodeAmount);
+
+            throw std::runtime_error("Data size is not equal to the total amount of computing nodes!");
+        }
+
+        for(size_t i = 0; i < computingNodeAmount; ++i) {
+            if(static_cast<size_t>(data.at(i)) != i) {
+                spdlog::error("Data at index({}) is not equal to the expected value({})!", i, i);
+
+                throw std::runtime_error("Data at index is not equal to the expected value!");
+            }
+        }
+    }
+
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
