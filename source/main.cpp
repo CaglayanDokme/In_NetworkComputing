@@ -301,7 +301,7 @@ int main(const int argc, const char *const argv[])
 
                 << ',' << "TimingCost"
                 << ',' << "BandwidthUsage"
-                << ',' << "TimeDiff"
+                << ',' << "ComplTimeDiff"
 
                 << '\n';
     }
@@ -332,24 +332,29 @@ int main(const int argc, const char *const argv[])
 
         return totalUsage;
     }();
-    const auto timeDiff = [&]() {
-        size_t maxReleaseTime = 0;
-        size_t minReleaseTime = std::numeric_limits<size_t>::max();
+    const auto complTimeDiff = [&]() {
+        size_t maxComplTime = 0;
+        size_t minComplTime = std::numeric_limits<size_t>::max();
 
         for(auto &compNode : computeNodes) {
-            maxReleaseTime = std::max(maxReleaseTime, compNode.getStatistics().mpi.broadcast.lastEnd_tick);
-            minReleaseTime = std::min(minReleaseTime, compNode.getStatistics().mpi.broadcast.lastEnd_tick);
+            maxComplTime = std::max(maxComplTime, compNode.getStatistics().mpi.broadcast.lastEnd_tick);
+            minComplTime = std::min(minComplTime, compNode.getStatistics().mpi.broadcast.lastEnd_tick);
         }
 
-        spdlog::trace("Max release time: {}, Min release time: {}", maxReleaseTime, minReleaseTime);
+        spdlog::trace("Max completion time: {}, Min completion time: {}", maxComplTime, minComplTime);
 
-        return maxReleaseTime - minReleaseTime;
+        return maxComplTime - minComplTime;
     }();
 
     csvFile << (bInNetworkComputing ? "1" : "0")
             << ',' << portPerSwitch
             << ',' << compNodeAmount
             << ',' << tick
+
+            << ',' << timingCost
+            << ',' << bandwidthUsage
+            << ',' << complTimeDiff
+
             << '\n';
 
     return 0;
