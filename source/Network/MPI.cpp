@@ -1523,6 +1523,8 @@ void MPI::allGather(std::vector<float> &data)
         // Lock here and avoid checking the already queued messages because the operation is incomplete unless every node has sent their data
         std::unique_lock lock(m_allGather.mutex);
 
+        const auto expectedSize = data.size() * Network::Constants::deriveComputingNodeAmount();
+
         // Send first
         {
             auto msg = std::make_unique<Messages::AllGather>();
@@ -1533,7 +1535,6 @@ void MPI::allGather(std::vector<float> &data)
         }
 
         // Wait for the message
-        const auto expectedSize = data.size() * Network::Constants::deriveComputingNodeAmount();
         while(true) {
             m_allGather.notifier.wait(lock);
 
