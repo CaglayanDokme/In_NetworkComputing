@@ -251,6 +251,8 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
         throw std::invalid_argument("MPI cannot send empty message!");
     }
 
+    m_statistics.directMsg.lastStart_tick = currentTick;
+
     // Send direct message
     {
         // Create a message
@@ -263,7 +265,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
     }
 
     // Wait for the acknowledgement
-    {
+    do {
         // Visit the acknowledgement queue
         {
             std::lock_guard lock(m_acknowledge.mutex);
@@ -279,7 +281,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
 
                 m_acknowledge.messages.erase(msgIterator);
 
-                return;
+                break;
             }
         }
 
@@ -309,11 +311,11 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
                 spdlog::warn("MPI({}): More acknowledgements({}) are pending!", m_ID, m_acknowledge.messages.size());
             }
 
-            return;
+            break;
         }
-    }
+    } while(false);
 
-    throw std::runtime_error("MPI: Shall never reach here!");
+    m_statistics.directMsg.lastEnd_tick = currentTick;
 }
 
 void MPI::send(const float &data, const size_t destinationID)
