@@ -64,6 +64,19 @@ void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
 
+    std::vector<float> data;
+    data.push_back(m_ID);
+
+    m_mpi.allGather(data);
+
+    for(size_t i = 0; i < computingNodeAmount; ++i) {
+        if(static_cast<size_t>(data.at(i)) != i) {
+            spdlog::error("Data at index({}) is not equal to the expected value({})!", i, i);
+
+            throw std::runtime_error("Data at index is not equal to the expected value!");
+        }
+    }
+
     spdlog::trace("Computer({}): Task finished..", m_ID);
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
