@@ -1509,6 +1509,8 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
 
 void MPI::allGather(std::vector<float> &data)
 {
+    m_statistics.allGather.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): All-gathering data", m_ID);
 
     if(data.empty()) {
@@ -1637,6 +1639,8 @@ void MPI::allGather(std::vector<float> &data)
             spdlog::trace("MPI({}): All-gathering completed", m_ID);
         }
     }
+
+    m_statistics.allGather.lastEnd_tick = currentTick;
 }
 
 void MPI::send(Network::Port::UniqueMsg msg)
