@@ -69,6 +69,12 @@ void Computer::task()
 
     m_mpi.allGather(data);
 
+    if(data.size() != computingNodeAmount) {
+        spdlog::error("Data size({}) is not equal to the expected value({})!", data.size(), computingNodeAmount);
+
+        throw std::runtime_error("Data size is not equal to the expected value!");
+    }
+
     for(size_t i = 0; i < computingNodeAmount; ++i) {
         if(static_cast<size_t>(data.at(i)) != i) {
             spdlog::error("Data at index({}) is not equal to the expected value({})!", i, i);
