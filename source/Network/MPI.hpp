@@ -27,8 +27,26 @@ namespace Network {
 
     public: /** Struct Declarations **/
         struct Statistics {
-            size_t totalSentMessages;
-            size_t totalReceivedMessages;
+            struct MsgBased {
+                size_t sent;
+                size_t received;
+
+                size_t lastStart_tick;
+                size_t lastEnd_tick;
+                size_t lastDuration() const { return lastEnd_tick - lastStart_tick; }
+            };
+
+            MsgBased total;
+            MsgBased acknowledge;
+            MsgBased directMsg;
+            MsgBased broadcast;
+            MsgBased barrier;
+            MsgBased reduce;
+            MsgBased reduceAll;
+            MsgBased scatter;
+            MsgBased gather;
+            MsgBased allGather;
+            MsgBased unknown;
         };
 
     public: /** Construction **/
@@ -197,5 +215,7 @@ namespace Network {
         StateHolder<Messages::AllGather> m_allGather;
         StateHolder<Messages::BarrierRequest> m_barrierRequest;
         StateHolder<Messages::BarrierRelease> m_barrierRelease;
+
+        inline static size_t currentTick = 0;
     };
 };

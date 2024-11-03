@@ -25,6 +25,10 @@ void MPI::tick()
     // Advance port
     m_port.tick();
 
+    if(m_ID == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+        ++currentTick;
+    }
+
     if(!m_port.hasIncoming()) {
         return;
     }
@@ -32,7 +36,7 @@ void MPI::tick()
     auto anyMsg = m_port.popIncoming();
     spdlog::trace("MPI({}): Received message type {}", m_ID, anyMsg->typeToString());
 
-    ++m_statistics.totalReceivedMessages;
+    ++m_statistics.total.received;
 
     if(anyMsg->m_destinationID.has_value()) {
         if(anyMsg->m_destinationID.value() != m_ID) {
@@ -63,6 +67,8 @@ void MPI::tick()
 
             m_acknowledge.notifier.notify_all();
 
+            ++m_statistics.acknowledge.received;
+
             break;
         }
         case Messages::e_Type::DirectMessage: {
@@ -77,6 +83,8 @@ void MPI::tick()
 
             m_directReceive.notifier.notify_all();
 
+            ++m_statistics.directMsg.received;
+
             break;
         }
         case Messages::e_Type::BroadcastMessage: {
@@ -90,6 +98,8 @@ void MPI::tick()
             }
 
             m_broadcastReceive.notifier.notify_all();
+
+            ++m_statistics.broadcast.received;
 
             break;
         }
@@ -111,6 +121,8 @@ void MPI::tick()
 
             m_barrierRequest.notifier.notify_all();
 
+            ++m_statistics.barrier.received;
+
             break;
         }
         case Messages::e_Type::BarrierRelease: {
@@ -130,6 +142,8 @@ void MPI::tick()
 
             m_barrierRelease.notifier.notify_all();
 
+            ++m_statistics.barrier.received;
+
             break;
         }
         case Messages::e_Type::Reduce: {
@@ -143,6 +157,8 @@ void MPI::tick()
             }
 
             m_reduce.notifier.notify_all();
+
+            ++m_statistics.reduce.received;
 
             break;
         }
@@ -158,6 +174,8 @@ void MPI::tick()
 
             m_reduceAll.notifier.notify_all();
 
+            ++m_statistics.reduceAll.received;
+
             break;
         }
         case Messages::e_Type::Scatter: {
@@ -171,6 +189,8 @@ void MPI::tick()
             }
 
             m_scatter.notifier.notify_all();
+
+            ++m_statistics.scatter.received;
 
             break;
         }
@@ -186,6 +206,8 @@ void MPI::tick()
 
             m_gather.notifier.notify_all();
 
+            ++m_statistics.gather.received;
+
             break;
         }
         case Messages::e_Type::AllGather: {
@@ -200,10 +222,14 @@ void MPI::tick()
 
             m_allGather.notifier.notify_all();
 
+            ++m_statistics.allGather.received;
+
             break;
         }
         default:  {
             spdlog::critical("MPI({}): Received unknown message type!", m_ID);
+
+            ++m_statistics.unknown.received;
 
             throw std::runtime_error("MPI: Unknown message type!");
         }
@@ -225,6 +251,8 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
         throw std::invalid_argument("MPI cannot send empty message!");
     }
 
+    m_statistics.directMsg.lastStart_tick = currentTick;
+
     // Send direct message
     {
         // Create a message
@@ -237,7 +265,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
     }
 
     // Wait for the acknowledgement
-    {
+    do {
         // Visit the acknowledgement queue
         {
             std::lock_guard lock(m_acknowledge.mutex);
@@ -253,7 +281,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
 
                 m_acknowledge.messages.erase(msgIterator);
 
-                return;
+                break;
             }
         }
 
@@ -283,11 +311,11 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
                 spdlog::warn("MPI({}): More acknowledgements({}) are pending!", m_ID, m_acknowledge.messages.size());
             }
 
-            return;
+            break;
         }
-    }
+    } while(false);
 
-    throw std::runtime_error("MPI: Shall never reach here!");
+    m_statistics.directMsg.lastEnd_tick = currentTick;
 }
 
 void MPI::send(const float &data, const size_t destinationID)
@@ -311,6 +339,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
         throw std::invalid_argument("MPI cannot receive from itself!");
     }
+
+    m_statistics.directMsg.lastStart_tick = currentTick;
 
     // Wait for the message
     do {
@@ -363,6 +393,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
         spdlog::trace("MPI({}): Sent {} acknowledgement to {}", m_ID, Messages::toString(Messages::e_Type::DirectMessage), sourceID);
     }
+
+    m_statistics.directMsg.lastEnd_tick = currentTick;
 }
 
 void MPI::receive(float &data, const size_t sourceID)
@@ -381,6 +413,8 @@ void MPI::receive(float &data, const size_t sourceID)
 
 void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 {
+    m_statistics.broadcast.lastStart_tick = currentTick;
+
     if(m_ID == sourceID) {
         spdlog::trace("MPI({}): Broadcasting..", m_ID);
 
@@ -422,7 +456,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             acks.at(m_ID) = true; // Skip the broadcaster
 
             {
-                std::remove_if(m_acknowledge.messages.begin(), m_acknowledge.messages.end(), [&](auto &&msg) {
+                std::erase_if(m_acknowledge.messages, [&](auto &&msg) {
                     if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
                         return false;
                     }
@@ -525,6 +559,8 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
+
+    m_statistics.broadcast.lastEnd_tick = currentTick;
 }
 
 void MPI::broadcast(float &data, const size_t sourceID)
@@ -551,6 +587,8 @@ void MPI::broadcast(float &data, const size_t sourceID)
 
 void MPI::barrier()
 {
+    m_statistics.barrier.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Barrier", m_ID);
 
     if(Network::Switches::isNetworkComputingEnabled()) {
@@ -890,10 +928,14 @@ void MPI::barrier()
     }
 
     spdlog::trace("MPI({}): Barrier released", m_ID);
+
+    m_statistics.barrier.lastEnd_tick = currentTick;
 }
 
 void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_t destinationID)
 {
+    m_statistics.reduce.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Reducing data at {}", m_ID, destinationID);
 
     if(data.empty()) {
@@ -906,26 +948,61 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
         if(Network::Switches::isNetworkComputingEnabled()) {
             std::unique_lock lock(m_reduce.mutex);
 
-            // Check the already queued messages
-            {
-                auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
-                    if(msg->m_opType != operation) {
-                        return false;
+            do {
+                // Check the already queued messages
+                {
+                    auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
+                        if(msg->m_opType != operation) {
+                            return false;
+                        }
+
+                        if(msg->m_data.size() != data.size()) {
+                            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
+
+                            return false;
+                        }
+
+                        return true;
+                    });
+
+                    if(msgIterator != m_reduce.messages.cend()) {
+                        spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+                        auto &msg = *msgIterator->get();
+
+                        std::transform( data.cbegin(),
+                                        data.cend(),
+                                        msg.m_data.cbegin(),
+                                        data.begin(),
+                                        [operation](const float &lhs, const float &rhs) {
+                                            return Messages::reduce(lhs, rhs, operation);
+                                        });
+
+                        m_reduce.messages.erase(msgIterator);
+
+                        break;
+                    }
+                }
+
+                // Wait for the message
+                while(true) {
+                    m_reduce.notifier.wait(lock);
+
+                    auto &msg = *m_reduce.messages.back();
+
+                    if(msg.m_opType != operation) {
+                        spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+
+                        continue;
                     }
 
-                    if(msg->m_data.size() != data.size()) {
-                        spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
+                    if(msg.m_data.size() != data.size()) {
+                        spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
 
-                        return false;
+                        continue;
                     }
 
-                    return true;
-                });
-
-                if(msgIterator != m_reduce.messages.cend()) {
                     spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-                    auto &msg = *msgIterator->get();
 
                     std::transform( data.cbegin(),
                                     data.cend(),
@@ -935,44 +1012,11 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
                                         return Messages::reduce(lhs, rhs, operation);
                                     });
 
-                    m_reduce.messages.erase(msgIterator);
+                    m_reduce.messages.pop_back();
 
-                    return;
+                    break;
                 }
-            }
-
-            // Wait for the message
-            while(true) {
-                m_reduce.notifier.wait(lock);
-
-                auto &msg = *m_reduce.messages.back();
-
-                if(msg.m_opType != operation) {
-                    spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
-
-                    continue;
-                }
-
-                if(msg.m_data.size() != data.size()) {
-                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
-
-                    continue;
-                }
-
-                spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-                std::transform( data.cbegin(),
-                                data.cend(),
-                                msg.m_data.cbegin(),
-                                data.begin(),
-                                [operation](const float &lhs, const float &rhs) {
-                                    return Messages::reduce(lhs, rhs, operation);
-                                });
-
-                m_reduce.messages.pop_back();
-
-                break;
-            }
+            } while(false);
         }
         else {
             std::unique_lock lock(m_reduce.mutex);
@@ -1027,6 +1071,8 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
         // Push the message to the port
         send(std::move(msg));
     }
+
+    m_statistics.reduce.lastEnd_tick = currentTick;
 }
 
 void MPI::reduce(float &data, const ReduceOp operation, const size_t destinationID)
@@ -1047,6 +1093,8 @@ void MPI::reduce(float &data, const ReduceOp operation, const size_t destination
 
 void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
 {
+    m_statistics.reduceAll.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Reducing data", m_ID);
 
     if(Network::Switches::isNetworkComputingEnabled()) {
@@ -1149,6 +1197,8 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
             m_reduceAll.messages.clear();
         }
     }
+
+    m_statistics.reduceAll.lastEnd_tick = currentTick;
 }
 
 void MPI::reduceAll(float &data, const ReduceOp operation)
@@ -1169,6 +1219,8 @@ void MPI::reduceAll(float &data, const ReduceOp operation)
 
 void MPI::scatter(std::vector<float> &data, const size_t sourceID)
 {
+    m_statistics.scatter.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Scattering data from {}", m_ID, sourceID);
 
     if(m_ID == sourceID) {
@@ -1225,67 +1277,73 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
             throw std::invalid_argument("Receive destination must be empty!");
         }
 
-        std::unique_lock lock(m_scatter.mutex);
+        do {
+            std::unique_lock lock(m_scatter.mutex);
 
-        bool bAlreadyReceived = false;
+            bool bAlreadyReceived = false;
 
-        // Check the already queued messages
-        if(!m_scatter.messages.empty()) {
-            auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
-                return (msg->m_sourceID.value() == sourceID);
-            });
+            // Check the already queued messages
+            if(!m_scatter.messages.empty()) {
+                auto msgIterator = std::find_if(m_scatter.messages.begin(), m_scatter.messages.end(), [sourceID](auto &&msg) {
+                    return (msg->m_sourceID.value() == sourceID);
+                });
 
-            if(msgIterator != m_scatter.messages.cend()) {
-                auto &msg = *msgIterator->get();
-                spdlog::trace("MPI({}): Received scatter message from computing node #{}", m_ID, msg.m_sourceID.value());
+                if(msgIterator != m_scatter.messages.cend()) {
+                    auto &msg = *msgIterator->get();
+                    spdlog::trace("MPI({}): Received scatter message from computing node #{}", m_ID, msg.m_sourceID.value());
 
-                data = std::move(msg.m_data);
-                m_scatter.messages.erase(msgIterator);
+                    data = std::move(msg.m_data);
+                    m_scatter.messages.erase(msgIterator);
 
-                return;
-            }
-        }
-
-        size_t omittedMsgAmount = m_scatter.messages.size();
-        if(omittedMsgAmount > 0) {
-            spdlog::debug("MPI({}): Omitted {} messages for scatter..", m_ID, omittedMsgAmount);
-        }
-
-        // Wait for the message
-        while(!bAlreadyReceived) {
-            if(m_scatter.messages.size() <= omittedMsgAmount) {
-                m_scatter.notifier.wait(lock, [&]() { return (m_scatter.messages.size() > omittedMsgAmount); });
+                    break;
+                }
             }
 
-            auto &msg = *m_scatter.messages.at(omittedMsgAmount);
+            size_t omittedMsgAmount = m_scatter.messages.size();
+            if(omittedMsgAmount > 0) {
+                spdlog::debug("MPI({}): Omitted {} messages for scatter..", m_ID, omittedMsgAmount);
+            }
 
-            if(msg.m_sourceID.value() != sourceID) {
-                spdlog::warn("MPI({}): Received scatter message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
-
-                if(0 != omittedMsgAmount) {
-                    std::string omittedSourceIDs;
-                    for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
-                        omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
-                    }
-
-                    spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+            // Wait for the message
+            while(!bAlreadyReceived) {
+                if(m_scatter.messages.size() <= omittedMsgAmount) {
+                    m_scatter.notifier.wait(lock, [&]() { return (m_scatter.messages.size() > omittedMsgAmount); });
                 }
 
-                continue;
+                auto &msg = *m_scatter.messages.at(omittedMsgAmount);
+
+                if(msg.m_sourceID.value() != sourceID) {
+                    spdlog::warn("MPI({}): Received scatter message from another source({}), expected note #{}", m_ID, msg.m_sourceID.value(), sourceID);
+
+                    if(0 != omittedMsgAmount) {
+                        std::string omittedSourceIDs;
+                        for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
+                            omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                        }
+
+                        spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
+                    }
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
+
+                data = std::move(msg.m_data);
+                m_scatter.messages.erase(m_scatter.messages.begin() + omittedMsgAmount);
+
+                break;
             }
-
-            spdlog::trace("MPI({}): Received scatter data from node #{}", m_ID, sourceID);
-
-            data = std::move(msg.m_data);
-            m_scatter.messages.erase(m_scatter.messages.begin() + omittedMsgAmount);
-
-            break;
-        }
+        } while(false);
     }
+
+    m_statistics.scatter.lastEnd_tick = currentTick;
 }
 
 void MPI::gather(std::vector<float> &data, const size_t destinationID)
 {
+    m_statistics.gather.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Gathering data at {}", m_ID, destinationID);
 
     if(data.empty()) {
@@ -1297,6 +1355,8 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
     if(m_ID == destinationID) {
         if(Network::Switches::isNetworkComputingEnabled()) {
             std::unique_lock lock(m_gather.mutex);
+
+            bool bAlreadyReceived = false;
 
             // Check the already queued messages
             do {
@@ -1328,12 +1388,14 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
                     data = std::move(msg.m_data);
                     m_gather.messages.erase(msgIterator);
 
-                    return;
+                    bAlreadyReceived = true;
+
+                    break;
                 }
             } while(false);
 
             // Wait for the message
-            while(true) {
+            while(!bAlreadyReceived) {
                 m_gather.notifier.wait(lock);
 
                 auto &msg = *m_gather.messages.back();
@@ -1441,10 +1503,14 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
 
         send(std::move(msg));
     }
+
+    m_statistics.gather.lastEnd_tick = currentTick;
 }
 
 void MPI::allGather(std::vector<float> &data)
 {
+    m_statistics.allGather.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): All-gathering data", m_ID);
 
     if(data.empty()) {
@@ -1573,10 +1639,49 @@ void MPI::allGather(std::vector<float> &data)
             spdlog::trace("MPI({}): All-gathering completed", m_ID);
         }
     }
+
+    m_statistics.allGather.lastEnd_tick = currentTick;
 }
 
 void MPI::send(Network::Port::UniqueMsg msg)
 {
+    switch(msg->m_eType) {
+        case Messages::e_Type::Acknowledge:
+            ++m_statistics.acknowledge.sent;
+            break;
+        case Messages::e_Type::DirectMessage:
+            ++m_statistics.directMsg.sent;
+            break;
+        case Messages::e_Type::BroadcastMessage:
+            ++m_statistics.broadcast.sent;
+            break;
+        case Messages::e_Type::BarrierRequest:
+            [[fallthrough]];
+        case Messages::e_Type::BarrierRelease:
+            ++m_statistics.barrier.sent;
+            break;
+        case Messages::e_Type::Reduce:
+            ++m_statistics.reduce.sent;
+            break;
+        case Messages::e_Type::ReduceAll:
+            ++m_statistics.reduceAll.sent;
+            break;
+        case Messages::e_Type::Scatter:
+            ++m_statistics.scatter.sent;
+            break;
+        case Messages::e_Type::Gather:
+            ++m_statistics.gather.sent;
+            break;
+        case Messages::e_Type::AllGather:
+            ++m_statistics.allGather.sent;
+            break;
+        default:
+            spdlog::warn("MPI({}): Unknown message type({}) sent!", m_ID, int(msg->m_eType));
+            ++m_statistics.unknown.sent;
+
+            break;
+    }
+
     m_port.pushOutgoing(std::move(msg));
-    ++m_statistics.totalSentMessages;
+    ++m_statistics.total.sent;
 }
