@@ -279,74 +279,80 @@ int main(const int argc, const char *const argv[])
 
     spdlog::info("Program finished after {} ticks!", tick);
 
-    // Record the results
-    do {
-        const auto resultFile = std::filesystem::current_path() / "result.csv";
+    const auto resultFilePath = std::filesystem::current_path() / "result.csv";
 
-        std::ofstream ofs(resultFile, std::ios::app);
-        if(!ofs.is_open()) {
-            spdlog::error("Couldn't open result file!");
-            spdlog::debug("File path: {}", resultFile.string());
+    std::fstream csvFile(resultFilePath, std::ios::app);
+    if(!csvFile.is_open()) {
+        spdlog::error("Couldn't open result file!");
+        spdlog::debug("File path: {}", resultFilePath.string());
 
-            break;
+        return -1;
+    }
+
+    // Write header if the file is empty
+    if(csvFile.tellp() == 0) {
+        csvFile << "INC"
+                << ',' << "Ports"
+                << ',' << "CompNodes"
+                << ',' << "TotalTicks"
+
+                << ',' << "TimingCost"
+                << ',' << "BandwidthUsage"
+                << ',' << "TimeDiff"
+
+                << '\n';
+    }
+
+    const auto timingCost = [&]() {
+        size_t maxDuration = 0;
+
+        for(auto &compNode : computeNodes) {
+            maxDuration = std::max(maxDuration, compNode.getStatistics().mpi.barrier.lastDuration());
         }
 
-        const auto timingCost = [&]() {
-            size_t maxDuration = 0;
+        return maxDuration;
+    }();
+    const auto bandwidthUsage = [&]() {
+        size_t totalUsage = 0;
 
-            for(auto &compNode : computeNodes) {
-                maxDuration = std::max(maxDuration, compNode.getStatistics().mpi.barrier.lastDuration());
-            }
-
-            return maxDuration;
-        }();
-        const auto bandwidthUsage = [&]() {
-            size_t totalUsage = 0;
-
-            for(const auto &sw : coreSwitches) {
-                totalUsage += sw.getStatistics().totalProcessedMessages;
-            }
-
-            for(const auto &sw : aggSwitches) {
-                totalUsage += sw.getStatistics().totalProcessedMessages;
-            }
-
-            for(const auto &sw : edgeSwitches) {
-                totalUsage += sw.getStatistics().totalProcessedMessages;
-            }
-
-            return totalUsage;
-        }();
-        const auto timeDiff = [&]() {
-            size_t maxReleaseTime = 0;
-            size_t minReleaseTime = std::numeric_limits<size_t>::max();
-
-            for(auto &compNode : computeNodes) {
-                maxReleaseTime = std::max(maxReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
-                minReleaseTime = std::min(minReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
-            }
-
-            spdlog::trace("Max release time: {}, Min release time: {}", maxReleaseTime, minReleaseTime);
-
-            return maxReleaseTime - minReleaseTime;
-        }();
-
-        if (ofs.tellp() == 0) {
-            ofs << "INC" << ','
-                << "Ports" << ','
-                << "CompNodes" << ','
-                << "TimingCost" << ','
-                << "BandwidthUsage" << ','
-                << "SyncDiff" << '\n';
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
         }
 
-        ofs << (bInNetworkComputing ? 1 : 0) << ','
-            << portPerSwitch << ','
-            << compNodeAmount << ','
-            << timingCost << ','
-            << bandwidthUsage << ','
-            << timeDiff << '\n';
-    } while(false);
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        return totalUsage;
+    }();
+    const auto timeDiff = [&]() {
+        size_t maxReleaseTime = 0;
+        size_t minReleaseTime = std::numeric_limits<size_t>::max();
+
+        for(auto &compNode : computeNodes) {
+            maxReleaseTime = std::max(maxReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
+            minReleaseTime = std::min(minReleaseTime, compNode.getStatistics().mpi.barrier.lastEnd_tick);
+        }
+
+        spdlog::trace("Max release time: {}, Min release time: {}", maxReleaseTime, minReleaseTime);
+
+        return maxReleaseTime - minReleaseTime;
+    }();
+
+    csvFile << (bInNetworkComputing ? "1" : "0")
+            << ',' << portPerSwitch
+            << ',' << compNodeAmount
+            << ',' << tick
+
+            << ',' << timingCost
+            << ',' << bandwidthUsage
+            << ',' << timeDiff
+
+            << '\n';
 
     return 0;
 }
