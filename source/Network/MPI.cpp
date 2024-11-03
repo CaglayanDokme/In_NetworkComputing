@@ -1342,6 +1342,8 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
 
 void MPI::gather(std::vector<float> &data, const size_t destinationID)
 {
+    m_statistics.gather.lastStart_tick = currentTick;
+
     spdlog::trace("MPI({}): Gathering data at {}", m_ID, destinationID);
 
     if(data.empty()) {
@@ -1353,6 +1355,8 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
     if(m_ID == destinationID) {
         if(Network::Switches::isNetworkComputingEnabled()) {
             std::unique_lock lock(m_gather.mutex);
+
+            bool bAlreadyReceived = false;
 
             // Check the already queued messages
             do {
@@ -1384,12 +1388,14 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
                     data = std::move(msg.m_data);
                     m_gather.messages.erase(msgIterator);
 
-                    return;
+                    bAlreadyReceived = true;
+
+                    break;
                 }
             } while(false);
 
             // Wait for the message
-            while(true) {
+            while(!bAlreadyReceived) {
                 m_gather.notifier.wait(lock);
 
                 auto &msg = *m_gather.messages.back();
@@ -1497,6 +1503,8 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
 
         send(std::move(msg));
     }
+
+    m_statistics.gather.lastEnd_tick = currentTick;
 }
 
 void MPI::allGather(std::vector<float> &data)
