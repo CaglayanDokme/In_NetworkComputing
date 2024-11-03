@@ -1,6 +1,8 @@
 // Libraries
 #include "spdlog/spdlog.h"
 #include "cxxopts.hpp"
+#include <filesystem>
+#include <fstream>
 #include <vector>
 
 // User-defined
@@ -274,6 +276,31 @@ int main(const int argc, const char *const argv[])
     }
 
     spdlog::warn("Program finished after {} ticks!", tick);
+
+    const auto resultFilePath = std::filesystem::current_path() / "result.csv";
+
+    std::fstream csvFile(resultFilePath, std::ios::app);
+    if(!csvFile.is_open()) {
+        spdlog::error("Couldn't open result file!");
+        spdlog::debug("File path: {}", resultFilePath.string());
+
+        return -1;
+    }
+
+    // Write header if the file is empty
+    if(csvFile.tellp() == 0) {
+        csvFile << "INC"
+                << ',' << "Ports"
+                << ',' << "CompNodes"
+                << ',' << "TotalTicks"
+                << '\n';
+    }
+
+    csvFile << (bInNetworkComputing ? "1" : "0")
+            << ',' << portPerSwitch
+            << ',' << compNodeAmount
+            << ',' << tick
+            << '\n';
 
     return 0;
 }
