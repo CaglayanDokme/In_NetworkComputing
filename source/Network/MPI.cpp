@@ -340,6 +340,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
         throw std::invalid_argument("MPI cannot receive from itself!");
     }
 
+    m_statistics.directMsg.lastStart_tick = currentTick;
+
     // Wait for the message
     do {
         std::unique_lock lock(m_directReceive.mutex);
@@ -391,6 +393,8 @@ void MPI::receive(std::vector<float> &data, const size_t sourceID)
 
         spdlog::trace("MPI({}): Sent {} acknowledgement to {}", m_ID, Messages::toString(Messages::e_Type::DirectMessage), sourceID);
     }
+
+    m_statistics.directMsg.lastEnd_tick = currentTick;
 }
 
 void MPI::receive(float &data, const size_t sourceID)
