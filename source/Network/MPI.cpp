@@ -1645,9 +1645,6 @@ void MPI::allGather(std::vector<float> &data)
 
 void MPI::send(Network::Port::UniqueMsg msg)
 {
-    m_port.pushOutgoing(std::move(msg));
-
-    ++m_statistics.total.sent;
     switch(msg->m_eType) {
         case Messages::e_Type::Acknowledge:
             ++m_statistics.acknowledge.sent;
@@ -1684,4 +1681,7 @@ void MPI::send(Network::Port::UniqueMsg msg)
 
             break;
     }
+
+    m_port.pushOutgoing(std::move(msg));
+    ++m_statistics.total.sent;
 }
