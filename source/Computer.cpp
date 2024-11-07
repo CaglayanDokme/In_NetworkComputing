@@ -84,24 +84,29 @@ void Computer::task()
                 matrixA[(row * computingNodeAmount) + col] = row + col;
                 matrixB[(row * computingNodeAmount) + col] = row - col;
 
-                rowStrA += fmt::format("{:6.0f} ", matrixA[(row * computingNodeAmount) + col]);
-                rowStrB += fmt::format("{:6.0f} ", matrixB[(row * computingNodeAmount) + col]);
+                if(spdlog::get_level() <= spdlog::level::debug) {
+                    rowStrA += fmt::format("{:6.0f} ", matrixA[(row * computingNodeAmount) + col]);
+                    rowStrB += fmt::format("{:6.0f} ", matrixB[(row * computingNodeAmount) + col]);
+                }
             }
 
-            rowStrA += "]";
-            rowStrB += "]";
+            if(spdlog::get_level() <= spdlog::level::debug) {
+                rowStrA += "]";
+                rowStrB += "]";
 
-            matrixStrA += rowStrA + "\n";
-            matrixStrB += rowStrB + "\n";
+                matrixStrA += rowStrA + "\n";
+                matrixStrB += rowStrB + "\n";
+            }
         }
 
-        spdlog::debug("Matrix A:\n{}", matrixStrA);
-        spdlog::debug("Matrix B:\n{}", matrixStrB);
+        if(spdlog::get_level() <= spdlog::level::debug) {
+            spdlog::debug("Matrix A:\n{}", matrixStrA);
+            spdlog::debug("Matrix B:\n{}", matrixStrB);
+        }
     }
 
     m_mpi.scatter(matrixA, 0);
     m_mpi.broadcast(matrixB, 0);
-    m_mpi.barrier();
 
     std::vector<float> localRow(computingNodeAmount);
 
@@ -120,10 +125,16 @@ void Computer::task()
     }
 
     m_mpi.gather(localRow, 0);
-    m_mpi.barrier();
 
-    if(0 == m_ID) {
+    m_statistics.timings.taskEnd_tick = currentTick;
+    spdlog::trace("Computer({}): Task finished..", m_ID);
+
+    m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
+    m_bDone = true;
+
+    if((0 == m_ID) && (spdlog::get_level() <= spdlog::level::debug)) {
         std::string resultStr;
+
         for(size_t row = 0; row < computingNodeAmount; ++row) {
             std::string rowStr = "[ ";
             for(size_t col = 0; col < computingNodeAmount; ++col) {
@@ -136,12 +147,6 @@ void Computer::task()
 
         spdlog::debug("Result:\n{}", resultStr);
     }
-
-    m_statistics.timings.taskEnd_tick = currentTick;
-    spdlog::trace("Computer({}): Task finished..", m_ID);
-
-    m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
-    m_bDone = true;
 
     for( ; true; sleep(1));
 }
