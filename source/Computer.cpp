@@ -1,6 +1,7 @@
 #include "Computer.hpp"
 #include "spdlog/spdlog.h"
 #include "Network/Message.hpp"
+#include <fmt/core.h>
 
 Computer::Computer()
 : m_ID(nextID++), m_mpi(m_ID)
@@ -65,7 +66,76 @@ void Computer::task()
     spdlog::trace("Computer({}): Task started..", m_ID);
     m_statistics.timings.taskStart_tick = currentTick;
 
-    // Task code here..
+    std::vector<float> matrixA;
+    std::vector<float> matrixB;
+
+    if(0 == m_ID) {
+        matrixA.resize(computingNodeAmount * computingNodeAmount);
+        matrixB.resize(computingNodeAmount * computingNodeAmount);
+
+        std::string matrixStrA;
+        std::string matrixStrB;
+
+        for(ssize_t row = 0; row < computingNodeAmount; ++row) {
+            std::string rowStrA = "[ ";
+            std::string rowStrB = "[ ";
+
+            for(ssize_t col = 0; col < computingNodeAmount; ++col) {
+                matrixA[(row * computingNodeAmount) + col] = row + col;
+                matrixB[(row * computingNodeAmount) + col] = row - col;
+
+                rowStrA += fmt::format("{:6.0f} ", matrixA[(row * computingNodeAmount) + col]);
+                rowStrB += fmt::format("{:6.0f} ", matrixB[(row * computingNodeAmount) + col]);
+            }
+
+            rowStrA += "]";
+            rowStrB += "]";
+
+            matrixStrA += rowStrA + "\n";
+            matrixStrB += rowStrB + "\n";
+        }
+
+        spdlog::debug("Matrix A:\n{}", matrixStrA);
+        spdlog::debug("Matrix B:\n{}", matrixStrB);
+    }
+
+    m_mpi.scatter(matrixA, 0);
+    m_mpi.broadcast(matrixB, 0);
+    m_mpi.barrier();
+
+    std::vector<float> localRow(computingNodeAmount);
+
+    for(size_t colIdxB = 0; colIdxB < computingNodeAmount; ++colIdxB) {
+        float sum = 0.0f;
+
+        for(size_t idx = 0; idx < computingNodeAmount; ++idx) {
+            const auto &colIdxA = idx;
+            const auto &rowIdxB = idx;
+
+            sum += matrixA[colIdxA] * matrixB[(rowIdxB * computingNodeAmount) + colIdxB];
+        }
+
+        const auto &localColIdx = colIdxB;
+        localRow[colIdxB] = sum;
+    }
+
+    m_mpi.gather(localRow, 0);
+    m_mpi.barrier();
+
+    if(0 == m_ID) {
+        std::string resultStr;
+        for(size_t row = 0; row < computingNodeAmount; ++row) {
+            std::string rowStr = "[ ";
+            for(size_t col = 0; col < computingNodeAmount; ++col) {
+                rowStr += fmt::format("{:6.0f} ", localRow[(row * computingNodeAmount) + col]);
+            }
+            rowStr += "]";
+
+            resultStr += rowStr + "\n";
+        }
+
+        spdlog::debug("Result:\n{}", resultStr);
+    }
 
     m_statistics.timings.taskEnd_tick = currentTick;
     spdlog::trace("Computer({}): Task finished..", m_ID);
