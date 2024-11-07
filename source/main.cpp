@@ -293,13 +293,33 @@ int main(const int argc, const char *const argv[])
                 << ',' << "Ports"
                 << ',' << "CompNodes"
                 << ',' << "TotalTicks"
+                << ',' << "BandwidthUsage"
                 << '\n';
     }
+
+    const auto bandwidthUsage = [&]() {
+        size_t totalUsage = 0;
+
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        return totalUsage;
+    }();
 
     csvFile << (bInNetworkComputing ? "1" : "0")
             << ',' << portPerSwitch
             << ',' << compNodeAmount
             << ',' << tick
+            << ',' << bandwidthUsage
             << '\n';
 
     return 0;
