@@ -27,8 +27,8 @@ namespace Network::Switches {
         m_portAmount(portAmount),
         m_ports(m_portAmount)
     {
-        if(2 > m_portAmount) {
-            spdlog::error("Port amount({}) cannot be smaller than 2!", m_portAmount);
+        if(4 > m_portAmount) {
+            spdlog::error("Port amount({}) cannot be smaller than 4!", m_portAmount);
 
             throw "Invalid port amount!";
         }
