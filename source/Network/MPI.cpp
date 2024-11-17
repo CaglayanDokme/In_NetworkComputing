@@ -1139,63 +1139,20 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         }
     }
     else {
-        // Send to all other nodes
-        {
-            for(size_t m_targetID = 0; m_targetID < Network::Constants::deriveComputingNodeAmount(); ++m_targetID) {
-                if(m_targetID == m_ID) {
-                    continue;
-                }
+        // Determine the root computing node
+        static const auto rootNode = std::rand() % Network::Constants::deriveComputingNodeAmount();
 
-                auto msg = std::make_unique<Messages::ReduceAll>(m_ID, m_targetID, operation);
-                msg->m_data = data;
-
-                send(std::move(msg));
-            }
+        if(m_ID == rootNode) {
+            spdlog::trace("MPI({}): Determined as the root node for all-reduce", m_ID);
         }
 
-        std::unique_lock lock(m_reduceAll.mutex);
+        reduce(data, operation, rootNode);
 
-        // Wait for the messages
-        std::vector<bool> rxFlags(Network::Constants::deriveComputingNodeAmount(), false);
-        rxFlags.at(m_ID) = true;
-
-        while(!std::all_of(rxFlags.cbegin(), rxFlags.cend(), [](const auto &flag) { return (true == flag); })) {
-            if(m_reduceAll.messages.empty()) {
-                m_reduceAll.notifier.wait(lock, [&]() { return !m_reduceAll.messages.empty(); });
-            }
-
-            for(const auto &msg : m_reduceAll.messages) {
-                if(msg->m_data.size() != data.size()) {
-                    spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
-
-                    throw std::runtime_error("MPI: Received data size doesn't match the expected size!");
-                }
-
-                if(msg->m_opType != operation) {
-                    spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg->m_opType), Messages::toString(operation));
-
-                    throw std::runtime_error("MPI: Received data with invalid operation!");
-                }
-
-                if(rxFlags.at(msg->m_sourceID.value())) {
-                    spdlog::critical("MPI({}): Received duplicate data from node #{}!", m_ID, msg->m_sourceID.value());
-
-                    throw std::runtime_error("MPI: Received duplicate data!");
-                }
-
-                std::transform( data.cbegin(),
-                                data.cend(),
-                                msg->m_data.cbegin(),
-                                data.begin(),
-                                [operation](const float &lhs, const float &rhs) {
-                                    return Messages::reduce(lhs, rhs, operation);
-                                });
-
-                rxFlags.at(msg->m_sourceID.value()) = true;
-            }
-
-            m_reduceAll.messages.clear();
+        if(m_ID != rootNode) {
+            data.clear();
         }
+
+        broadcast(data, rootNode);
     }
 
     m_statistics.reduceAll.lastEnd_tick = currentTick;
@@ -1555,90 +1512,16 @@ void MPI::allGather(std::vector<float> &data)
         }
     }
     else {
-        // Send to all other nodes firstly
-        for(size_t compNodeID = 0; compNodeID < Network::Constants::deriveComputingNodeAmount(); ++compNodeID) {
-            if(m_ID == compNodeID) {
-                continue;
-            }
+        // Determine the root node
+        static const auto rootNode = std::rand() % Network::Constants::deriveComputingNodeAmount();
 
-            auto msg = std::make_unique<Messages::AllGather>(m_ID, compNodeID);
+        gather(data, rootNode);
 
-            msg->m_data = data;
-
-            send(std::move(msg));
+        if(m_ID != rootNode) {
+            data.clear();
         }
 
-        // Receive the data from all other nodes
-        {
-            std::unique_lock lock(m_allGather.mutex);
-
-            std::vector<
-                std::pair<
-                    size_t,             // Source ID
-                    std::vector<float>  // Data
-                >
-            > receivedData;
-
-            // Check the already queued messages
-            {
-                spdlog::trace("Checking already queued all-gather messages..");
-
-                for(auto &&msg : m_allGather.messages) {
-                    auto pAlreadyReceived = std::find_if(receivedData.cbegin(), receivedData.cend(), [&](auto &&alreadyReceived) {
-                        return (alreadyReceived.first == msg->m_sourceID.value());
-                    });
-
-                    if(receivedData.cend() != pAlreadyReceived) {
-                        spdlog::critical("MPI({}): Received duplicate all-gather message from node #{}", m_ID, msg->m_sourceID.value());
-
-                        throw std::logic_error("MPI: Duplicate all-gather message!");
-                    }
-
-                    receivedData.emplace_back(msg->m_sourceID.value(), std::move(msg->m_data));
-                    spdlog::trace("MPI({}): Received all-gather message from node #{}", m_ID, msg->m_sourceID.value());
-                }
-                m_allGather.messages.clear();
-            }
-
-            // Wait for the remaining messages
-            while(receivedData.size() < (Network::Constants::deriveComputingNodeAmount() - 1)) {
-                spdlog::trace("Waiting for all-gather messages..");
-
-                m_allGather.notifier.wait(lock, [&]() { return !m_allGather.messages.empty(); });
-
-                for(auto &&msg : m_allGather.messages) {
-                    auto pAlreadyReceived = std::find_if(receivedData.cbegin(), receivedData.cend(), [&](auto &&alreadyReceived) {
-                        return (alreadyReceived.first == msg->m_sourceID.value());
-                    });
-
-                    if(receivedData.cend() != pAlreadyReceived) {
-                        spdlog::critical("MPI({}): Received duplicate all-gather message from node #{}", m_ID, msg->m_sourceID.value());
-
-                        throw std::logic_error("MPI: Duplicate all-gather message!");
-                    }
-
-                    receivedData.emplace_back(msg->m_sourceID.value(), std::move(msg->m_data));
-                    spdlog::trace("MPI({}): Received all-gather message from node #{}", m_ID, msg->m_sourceID.value());
-                }
-
-                m_allGather.messages.clear();
-            }
-
-            // Insert own data before sorting
-            receivedData.emplace_back(m_ID, std::move(data));
-
-            // Sort the received data
-            std::sort(receivedData.begin(), receivedData.end(), [](const auto &lhs, const auto &rhs) {
-                return (lhs.first < rhs.first);
-            });
-
-            // Gather the data
-            for(auto &&[sourceID, chunk] : receivedData) {
-                data.insert(data.end(), chunk.cbegin(), chunk.cend());
-            }
-
-            spdlog::trace("MPI({}): All-gathering completed", m_ID);
-        }
+        broadcast(data, rootNode);
     }
 
     m_statistics.allGather.lastEnd_tick = currentTick;
