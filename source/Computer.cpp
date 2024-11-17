@@ -77,7 +77,9 @@ void Computer::task()
         spdlog::error("Data({}) is invalid! Expected {}", data.at(0), computingNodeAmount - 1);
     }
 
+    m_statistics.timings.taskEnd_tick = currentTick;
     spdlog::trace("Computer({}): Task finished..", m_ID);
+
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
 

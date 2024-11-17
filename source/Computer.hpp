@@ -8,6 +8,12 @@ class Computer {
 public: /** Struct Declarations **/
     struct Statistics  {
         Network::MPI::Statistics mpi;
+
+        struct Timings {
+            size_t taskStart_tick;
+            size_t taskEnd_tick;
+            size_t taskDuration() const { return taskEnd_tick - taskStart_tick; }
+        } timings;
     };
 
 public: /** Construction **/
