@@ -63,6 +63,7 @@ bool Computer::isReady() const
 void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
+    m_statistics.timings.taskStart_tick = currentTick;
 
     std::vector<float> data;
     data.push_back(m_ID);
@@ -84,6 +85,7 @@ void Computer::task()
     }
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
+
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
 
