@@ -1139,63 +1139,20 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         }
     }
     else {
-        // Send to all other nodes
-        {
-            for(size_t m_targetID = 0; m_targetID < Network::Constants::deriveComputingNodeAmount(); ++m_targetID) {
-                if(m_targetID == m_ID) {
-                    continue;
-                }
+        // Determine the root computing node
+        static const auto rootNode = std::rand() % Network::Constants::deriveComputingNodeAmount();
 
-                auto msg = std::make_unique<Messages::ReduceAll>(m_ID, m_targetID, operation);
-                msg->m_data = data;
-
-                send(std::move(msg));
-            }
+        if(m_ID == rootNode) {
+            spdlog::trace("MPI({}): Determined as the root node for all-reduce", m_ID);
         }
 
-        std::unique_lock lock(m_reduceAll.mutex);
+        reduce(data, operation, rootNode);
 
-        // Wait for the messages
-        std::vector<bool> rxFlags(Network::Constants::deriveComputingNodeAmount(), false);
-        rxFlags.at(m_ID) = true;
-
-        while(!std::all_of(rxFlags.cbegin(), rxFlags.cend(), [](const auto &flag) { return (true == flag); })) {
-            if(m_reduceAll.messages.empty()) {
-                m_reduceAll.notifier.wait(lock, [&]() { return !m_reduceAll.messages.empty(); });
-            }
-
-            for(const auto &msg : m_reduceAll.messages) {
-                if(msg->m_data.size() != data.size()) {
-                    spdlog::critical("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
-
-                    throw std::runtime_error("MPI: Received data size doesn't match the expected size!");
-                }
-
-                if(msg->m_opType != operation) {
-                    spdlog::critical("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg->m_opType), Messages::toString(operation));
-
-                    throw std::runtime_error("MPI: Received data with invalid operation!");
-                }
-
-                if(rxFlags.at(msg->m_sourceID.value())) {
-                    spdlog::critical("MPI({}): Received duplicate data from node #{}!", m_ID, msg->m_sourceID.value());
-
-                    throw std::runtime_error("MPI: Received duplicate data!");
-                }
-
-                std::transform( data.cbegin(),
-                                data.cend(),
-                                msg->m_data.cbegin(),
-                                data.begin(),
-                                [operation](const float &lhs, const float &rhs) {
-                                    return Messages::reduce(lhs, rhs, operation);
-                                });
-
-                rxFlags.at(msg->m_sourceID.value()) = true;
-            }
-
-            m_reduceAll.messages.clear();
+        if(m_ID != rootNode) {
+            data.clear();
         }
+
+        broadcast(data, rootNode);
     }
 
     m_statistics.reduceAll.lastEnd_tick = currentTick;
