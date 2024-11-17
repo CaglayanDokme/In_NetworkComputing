@@ -63,10 +63,12 @@ bool Computer::isReady() const
 void Computer::task()
 {
     spdlog::trace("Computer({}): Task started..", m_ID);
+    m_statistics.timings.taskStart_tick = currentTick;
 
     m_mpi.barrier();
 
     spdlog::trace("Computer({}): Task finished..", m_ID);
+
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
     m_bDone = true;
 
