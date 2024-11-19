@@ -438,6 +438,12 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
         throw std::invalid_argument("Edge: Null message given!");
     }
 
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::critical("Edge Switch({}): Reduce message doesn't have a destination ID!", m_ID);
+
+        throw std::runtime_error("Edge Switch: Reduce message doesn't have a destination ID!");
+    }
+
     // Decide on direction
     const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
 
