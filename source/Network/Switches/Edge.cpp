@@ -1289,6 +1289,14 @@ size_t Edge::getUpPortAmount() const
     return upPortAmount;
 }
 
+bool Edge::isComputingNodeConnected(const size_t compNodeIdx) const
+{
+    const size_t minIndex = firstCompNodeIdx;
+    const size_t maxIndex = firstCompNodeIdx + getDownPortAmount() - 1;
+
+    return ((compNodeIdx >= minIndex) && (compNodeIdx <= maxIndex));
+}
+
 bool Edge::GatherState::ToDown::push(const size_t compNodeIdx, const size_t destID, decltype(Messages::Gather::m_data) &&data)
 {
     if(value.size() != Constants::deriveComputingNodeAmount()) {

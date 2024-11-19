@@ -80,6 +80,13 @@ namespace Network::Switches {
         [[nodiscard]] size_t getDownPortAmount() const;
         [[nodiscard]] size_t getUpPortAmount() const;
 
+        /**
+         * @brief  Check if a computing node is connected to this switch
+         * @param  compNodeIdx Index of the computing node
+         * @return True if the computing node is connected
+         */
+        [[nodiscard]] bool isComputingNodeConnected(const size_t compNodeIdx) const;
+
     private: /** Members **/
         const size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
         size_t m_nextPort{0};
