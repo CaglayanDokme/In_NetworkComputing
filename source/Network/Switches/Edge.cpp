@@ -11,6 +11,10 @@ Edge::Edge(const size_t portAmount)
 {
     spdlog::trace("Created edge switch with ID #{}", m_ID);
 
+    static const size_t aggSwitchPerGroup = getDownPortAmount();
+    const size_t localColumnIdx = m_ID % aggSwitchPerGroup; // Column index in the group
+    m_sameColumnPortID = localColumnIdx;
+
     // Calculate look-up table for re-direction to down ports
     {
         for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
@@ -32,49 +36,6 @@ Edge::Edge(const size_t portAmount)
         for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             m_barrierReleaseFlags.insert({upPortIdx, false});
         }
-    }
-
-    // Initialize reduce requests
-    {
-        /* A reduce request destined to an up-port must wait for the data of other down-ports.
-         * When all down-ports have sent their data, the reduce request is released.
-         * Reduce message can only be sent to the same column aggregate switch
-         *
-         * A reduce request destined to a down-port must wait for the data of other up-ports and other down-ports(other than the destined port).
-         * When all up-ports and other down-ports have sent their data, the reduce request is released.
-         *
-         * To improve synchronization in system, it's forbidden to have up-port and down-port reduce requests at the same time.
-         */
-
-        // To-up
-        {
-            for(size_t portIdx = getUpPortAmount(); portIdx < m_portAmount; ++portIdx) {
-                m_reduceStates.toUp.receiveFlags.insert({portIdx, false});
-            }
-
-            if(m_reduceStates.toUp.receiveFlags.size() != getDownPortAmount()) {
-                spdlog::critical("Edge Switch({}): Amount of up-port reduce requests is not equal to down-port amount!", m_ID);
-
-                throw std::runtime_error("Invalid mapping!");
-            }
-        }
-
-        // To-down
-        {
-            for(size_t portIdx = 0; portIdx < m_portAmount; ++portIdx) {
-                m_reduceStates.toDown.receiveFlags.insert({portIdx, false});
-            }
-
-            if(m_reduceStates.toDown.receiveFlags.size() != m_portAmount) {
-                spdlog::critical("Edge Switch({}): Amount of down-port reduce requests is not equal to the total port amount!", m_ID);
-
-                throw std::runtime_error("Invalid mapping!");
-            }
-        }
-
-        const size_t aggSwitchPerGroup = getDownPortAmount();
-        const size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
-        m_reduceStates.sameColumnPortID     = localColumnIdx;
     }
 
     // Initialize reduce-all requests
@@ -233,6 +194,10 @@ bool Edge::tick()
             }
             case Messages::e_Type::AllGather: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::AllGather>(static_cast<Messages::AllGather*>(anyMsg.release()))));
+                break;
+            }
+            case Messages::e_Type::IS_Reduce: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Scatter: {
@@ -445,7 +410,7 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
     }
 
     // Decide on direction
-    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
+    const bool bToUp = !isComputingNodeConnected(msg->m_destinationID.value());
 
     if(bToUp) {
         if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
@@ -457,69 +422,37 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
         auto &state = m_reduceStates.toUp;
 
         // Check if there was an ongoing transfer to down
-        if(m_reduceStates.toDown.bOngoing) {
-            spdlog::critical("Edge Switch({}): Ongoing transfer to down-port!", m_ID);
+        if(m_reduceStates.toDown.has_value()) {
+            spdlog::critical("Edge Switch({}): Ongoing reduce operation to down!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Ongoing transfer to down-port!");
+            throw std::runtime_error("Edge Switch: Ongoing reduce operation to down!");
         }
 
-        if(!state.bOngoing) {
-            state.bOngoing      = true;
-            state.destinationID = msg->m_destinationID.value();
-            state.opType        = msg->m_opType;
-            state.value         = std::move(msg->m_data);
+        if(!state.has_value()) {
+            state.emplace();
 
-            state.receiveFlags.at(sourcePortIdx) = true;
+            state->m_destinationID = msg->m_destinationID.value();
+            state->m_opType        = msg->m_opType;
+            state->m_value         = std::move(msg->m_data);
+            state->m_contributors.push_back(sourcePortIdx);
         }
         else {
-            if(state.receiveFlags.at(sourcePortIdx)) {
-                spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce message!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Edge Switch: This port has already sent a reduce message!");
-            }
-
-            if(state.destinationID != msg->m_destinationID.value()) {
-                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID.value(), state.destinationID);
-
-                throw std::runtime_error("Edge Switch: The destination ID is different!");
-            }
-
-            if(state.opType != msg->m_opType) {
-                spdlog::critical("Edge Switch({}): Wrong reduce operation type from port #{}! Expected {} but received {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg->m_opType));
-
-                throw std::runtime_error("Edge Switch: The operation type is different!");
-            }
-
-            if(state.value.size() != msg->m_data.size()) {
-                spdlog::critical("Edge Switch({}): Received data size({}) is different from the expected({})!", m_ID, msg->m_data.size(), state.value.size());
-
-                throw std::runtime_error("Edge Switch: Received data size is different from the expected!");
-            }
-
-            // Apply reduce
-            state.receiveFlags.at(sourcePortIdx) = true;
-
-            std::transform(state.value.cbegin(),
-                            state.value.cend(),
-                            msg->m_data.cbegin(),
-                            state.value.begin(),
-                            [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
+            state->push({msg->m_sourceID.value()}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
 
             // Check if all down-ports have sent message
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(state->m_contributors.size() == getDownPortAmount()) {
+                spdlog::trace("Edge Switch({}): Sending the reduced data to the same column up-port #{}", m_ID, m_sameColumnPortID);
+
                 // Send reduced message to the same column up-port
-                auto txMsg = std::make_unique<Messages::Reduce>(state.destinationID, state.opType);
-                txMsg->m_data = std::move(state.value);
-                state.value.clear();
+                auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(msg->m_destinationID.value());
 
-                getPort(m_reduceStates.sameColumnPortID).pushOutgoing(std::move(txMsg));
+                txMsg->m_contributors = std::move(state->m_contributors);
+                txMsg->m_data         = std::move(state->m_value);
+                txMsg->m_opType       = state->m_opType;
 
-                // Reset to-up state
-                state.bOngoing = false;
-                std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
+
+                state.reset();
             }
         }
     }
@@ -527,73 +460,29 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
         auto &state = m_reduceStates.toDown;
 
         // Check if there was an ongoing transfer to up
-        if(m_reduceStates.toUp.bOngoing) {
-            spdlog::critical("Edge Switch({}): Ongoing transfer to up-port!", m_ID);
+        if(m_reduceStates.toUp.has_value()) {
+            spdlog::critical("Edge Switch({}): Ongoing reduce operation to up!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Ongoing transfer to up-port!");
+            throw std::runtime_error("Edge Switch: Ongoing reduce operation to up!");
         }
 
-        if(!state.bOngoing) {
-            state.bOngoing      = true;
-            state.destinationID = msg->m_destinationID.value();
-            state.opType        = msg->m_opType;
-            state.value         = std::move(msg->m_data);
-            state.receiveFlags.at(sourcePortIdx) = true;
-
-            if(getPort(sourcePortIdx) == m_downPortTable.at(msg->m_destinationID.value())) {
-                spdlog::critical("Edge Switch({}): Received a reduce message destined to the source itself(Port: #{})!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Edge Switch: Received a reduce message destined to the source itself!");
-            }
+        if(!state.has_value()) {
+            state->m_destinationID = msg->m_destinationID.value();
+            state->m_opType        = msg->m_opType;
+            state->m_value         = std::move(msg->m_data);
+            state->m_contributors.push_back(msg->m_sourceID.value());
         }
         else {
-            if(state.receiveFlags.at(sourcePortIdx)) {
-                spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce message!", m_ID, sourcePortIdx);
+            state->push({msg->m_sourceID.value()}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
 
-                throw std::runtime_error("Edge Switch: This port has already sent a reduce message!");
-            }
+            if(state->m_contributors.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+                auto txMsg = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
+                txMsg->m_data = std::move(state->m_value);
 
-            if(state.destinationID != msg->m_destinationID.value()) {
-                spdlog::critical("Edge Switch({}): In reduce message, the destination ID({}) is different(expected {})!", m_ID, msg->m_destinationID.value(), state.destinationID);
-
-                throw std::runtime_error("Edge Switch: The destination ID is different!");
-            }
-
-            if(state.opType != msg->m_opType) {
-                spdlog::critical("Edge Switch({}): Wrong reduce operation type from port #{}! Expected {} but received {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg->m_opType));
-
-                throw std::runtime_error("Edge Switch: The operation type is different!");
-            }
-
-            if(state.value.size() != msg->m_data.size()) {
-                spdlog::critical("Edge Switch({}): Received data size({}) is different from the expected({})!", m_ID, msg->m_data.size(), state.value.size());
-
-                throw std::runtime_error("Edge Switch: Received data size is different from the expected!");
-            }
-
-            // Apply reduce
-            state.receiveFlags.at(sourcePortIdx) = true;
-            std::transform(state.value.cbegin(),
-                            state.value.cend(),
-                            msg->m_data.cbegin(),
-                            state.value.begin(),
-                            [&state](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, state.opType); });
-
-            // Check if all up-ports and all other down-ports have sent message
-            const auto rxCount = std::count_if(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; });
-
-            if((state.receiveFlags.size() - 1) == rxCount) {
-                auto txMsg = std::make_unique<Messages::Reduce>(state.destinationID, state.opType);
-                txMsg->m_data = state.value;
-
-                m_downPortTable.at(state.destinationID).pushOutgoing(std::move(txMsg));
+                m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
 
                 // Reset to-down state
-                state.bOngoing = false;
-                std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                state.reset();
             }
         }
     }
@@ -1028,6 +917,62 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::AllGath
     }
 }
 
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg)
+{
+    if(!msg) {
+        spdlog::critical("Edge({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Edge: Null message given!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::critical("Edge({}): Reduce message doesn't have a destination ID!", m_ID);
+
+        throw std::runtime_error("Edge: Reduce message doesn't have a destination ID!");
+    }
+
+    if(isComputingNodeConnected(msg->m_destinationID.value())) {
+        spdlog::critical("Edge({}): Destined computing #{} isn't connected to this switch!", m_ID, msg->m_destinationID.value());
+
+        throw std::runtime_error("Edge: Destined computing node isn't connected to this switch!");
+    }
+
+    if(sourcePortIdx >= getUpPortAmount()) {
+        spdlog::critical("Edge({}): Reduce message received from a down-port!", m_ID);
+
+        throw std::runtime_error("Edge: Reduce message received from a down-port!");
+    }
+
+    auto &state = m_reduceStates.toDown;
+
+    // Check if there was an ongoing transfer to up
+    if(m_reduceStates.toUp.has_value()) {
+        spdlog::critical("Edge Switch({}): Ongoing reduce operation to up!", m_ID);
+
+        throw std::runtime_error("Edge Switch: Ongoing reduce operation to up!");
+    }
+
+    if(!state.has_value()) {
+        state->m_destinationID = msg->m_destinationID.value();
+        state->m_opType        = msg->m_opType;
+        state->m_value         = std::move(msg->m_data);
+        state->m_contributors.push_back(msg->m_sourceID.value());
+    }
+    else {
+        state->push({msg->m_contributors}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
+
+        if(state->m_contributors.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+            auto txMsg = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
+            txMsg->m_data = std::move(state->m_value);
+
+            m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
+
+            // Reset to-down state
+            state.reset();
+        }
+    }
+}
+
 void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
 {
     if(!msg) {
@@ -1297,6 +1242,36 @@ bool Edge::isComputingNodeConnected(const size_t compNodeIdx) const
     return ((compNodeIdx >= minIndex) && (compNodeIdx <= maxIndex));
 }
 
+void Edge::ReduceState::push(const std::vector<size_t> &sourceIDs, const size_t destID, const Messages::Reduce::OpType opType, decltype(m_value) &&data)
+{
+    if(opType != m_opType) {
+        spdlog::critical("Edge Switch: Operation type mismatch in reduce messages! Expected {}, received {}", Messages::toString(m_opType), Messages::toString(opType));
+
+        throw std::runtime_error("Edge Switch: Operation type mismatch in reduce messages!");
+    }
+
+    if(destID != m_destinationID) {
+        spdlog::critical("Edge Switch: Destination IDs mismatch in reduce messages! Expected {}, received {}", m_destinationID, destID);
+
+        throw std::runtime_error("Edge Switch: Destination IDs mismatch in reduce messages!");
+    }
+
+    for (const auto& sourceID : sourceIDs) {
+        if (std::find(m_contributors.begin(), m_contributors.end(), sourceID) != m_contributors.end()) {
+            spdlog::critical("Edge Switch: Source ID {} has already sent a reduce message!", sourceID);
+
+            throw std::runtime_error("Edge Switch: Source ID has already sent a reduce message!");
+        }
+    }
+
+    m_contributors.insert(m_contributors.end(), sourceIDs.begin(), sourceIDs.end());
+    std::transform(m_value.cbegin(),
+                   m_value.cend(),
+                   data.cbegin(),
+                   m_value.begin(),
+                   [opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+}
+
 bool Edge::GatherState::ToDown::push(const size_t compNodeIdx, const size_t destID, decltype(Messages::Gather::m_data) &&data)
 {
     if(value.size() != Constants::deriveComputingNodeAmount()) {
@@ -1361,11 +1336,3 @@ void Edge::GatherState::ToDown::reset()
         entry.clear();
     }
 }
-
-// EUROsimA
-// Quick sort with load balancing
-// subgroup comm. (ilk oncelik bunda)
-    // https://www.mpich.org/static/docs/v3.1/www3/MPI_Comm_split.html
-// Parallel prefix-sum
-    // Hocada sekiller var, iste
-// Bildiri yapılmalı mı?
