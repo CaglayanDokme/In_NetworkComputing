@@ -10,6 +10,9 @@ Aggregate::Aggregate(const size_t portAmount)
 {
     spdlog::trace("Created aggregate switch with ID #{}", m_ID);
 
+    m_subColumnIdx     = m_ID % Network::Constants::getColumnAmount();
+    m_sameColumnPortID = getUpPortAmount() + m_subColumnIdx;
+
     // Calculate look-up table for re-direction to down ports
     {
         const size_t downPortAmount = getDownPortAmount();
@@ -35,25 +38,6 @@ Aggregate::Aggregate(const size_t portAmount)
         for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             m_barrierReleaseFlags.insert({upPortIdx, false});
         }
-    }
-
-    // Initialize reduce requests
-    {
-        /* A reduce request destined to an up-port can be redirected immediately.
-         * On the other hand, a reduce request destined to a down-port will be delayed until all up-ports have received
-         * the same message. If the destination port placed in the same column, only the up-port messages would be enough.
-         * In other case, the reduce message of the edge switch placed on the same column will be waited on.
-         */
-
-        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx){
-            m_reduceStates.flags.insert({upPortIdx, false});
-        }
-
-        const size_t aggSwitchPerGroup = getDownPortAmount();
-        const size_t localColumnIdx    = m_ID % aggSwitchPerGroup; // Column index in the group
-        m_reduceStates.sameColumnPortID    = getUpPortAmount() + localColumnIdx;
-
-        m_reduceStates.flags.insert({m_reduceStates.sameColumnPortID, false});
     }
 
     // Initialize reduce-all requests
@@ -184,12 +168,12 @@ bool Aggregate::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease*>(anyMsg.release()))));
                 break;
             }
-            case Messages::e_Type::Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce*>(anyMsg.release()))));
-                break;
-            }
             case Messages::e_Type::ReduceAll: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                break;
+            }
+            case Messages::e_Type::IS_Reduce: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Scatter: {
@@ -369,162 +353,6 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 }
 
-void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
-{
-    // Check if source port exists in source table for reduction messages
-    if(std::find_if(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [sourcePortIdx](const auto& entry) { return entry.first == sourcePortIdx; }) == m_reduceStates.flags.cend()) {
-        spdlog::error("Aggregate Switch({}): Received a reduction message from an invalid source port(#{})!", m_ID, sourcePortIdx);
-
-        throw std::runtime_error("Received a reduction message from an invalid source port!");
-    }
-
-    const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
-    if(bDownPort) {
-        // A reduce message can be received from the same column down-port only
-        if(sourcePortIdx != m_reduceStates.sameColumnPortID) {
-            spdlog::error("Aggregate Switch({}): Received a reduce message from an invalid down-port(#{})!", m_ID, sourcePortIdx);
-
-            throw std::runtime_error(" Received a reduce message from an invalid down-port!");
-        }
-    }
-
-    const bool bOngoingRedirection = std::any_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return entry.second; });
-
-    // Decide on direction (up or down)
-    auto search = m_downPortTable.find(msg->m_destinationID.value());
-
-    if((search != m_downPortTable.end())) {
-        if(bOngoingRedirection) {
-            // Process message
-            {
-                if(m_reduceStates.flags.at(sourcePortIdx)) {
-                    spdlog::critical("Aggregate Switch({}): Received multiple reduce messages from port #{}!", m_ID, sourcePortIdx);
-
-                    throw std::runtime_error("Aggregate Switch: Received multiple reduce messages!");
-                }
-
-                if(msg->m_opType != m_reduceStates.opType) {
-                    spdlog::critical("Aggregate Switch({}): Wrong reduce operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(m_reduceStates.opType), Messages::toString(msg->m_opType));
-
-                    throw std::runtime_error("Aggregate Switch: Operation types doesn't match in reduce messages!");
-                }
-
-                if(m_reduceStates.value.size() != msg->m_data.size()) {
-                    spdlog::critical("Aggregate Switch({}): Received reduce message with different data size from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, m_reduceStates.value.size(), msg->m_data.size());
-
-                    throw std::runtime_error("Aggregate Switch: Data sizes doesn't match in reduce messages!");
-                }
-
-                const bool bFirstUpPortData = !bDownPort && m_reduceStates.upPortReferenceValue.empty();
-
-                if(bDownPort || bFirstUpPortData) {
-                    std::transform( m_reduceStates.value.cbegin(),
-                                    m_reduceStates.value.cend(),
-                                    msg->m_data.cbegin(),
-                                    m_reduceStates.value.begin(),
-                                    [opType = m_reduceStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
-                }
-
-                m_reduceStates.flags.at(sourcePortIdx) = true;
-
-                if(bFirstUpPortData) {
-                    m_reduceStates.upPortReferenceValue = std::move(msg->m_data);
-                }
-                else if(!bDownPort) {
-                    if(m_reduceStates.upPortReferenceValue != msg->m_data) {
-                        spdlog::critical("Aggregate Switch({}): Up-port(#{}) value doesn't match the reference value!", m_ID, sourcePortIdx);
-
-                        throw std::runtime_error("Aggregate Switch: Up-port value doesn't match the reference value!");
-                    }
-                }
-                else {
-                    // Nothing to do
-                }
-            }
-
-            // Check if all reduce messages are received
-            {
-                const auto rxCount = std::count_if(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(),
-                                                    [](const auto &entry)
-                                                    { return entry.second; });
-
-                auto &destinationPort = m_downPortTable.at(m_reduceStates.destinationID);
-                const bool bDestinedToSameColumn = (destinationPort == getPort(m_reduceStates.sameColumnPortID));
-
-                if(bDestinedToSameColumn) {
-                    if(m_reduceStates.flags.at(m_reduceStates.sameColumnPortID)) {
-                        spdlog::critical("Aggregate Switch({}): Although destined to the same column port, received reduce message from that port!", m_ID);
-
-                        throw std::runtime_error("Aggregate Switch: Received reduce message from the same column port which is the destined port!");
-                    }
-
-                    if(getUpPortAmount() == rxCount) {
-                        spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports! Re-directing..", m_ID);
-
-                        auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-                        msg->m_data = std::move(m_reduceStates.value);
-                        m_reduceStates.value.clear();
-                        m_reduceStates.upPortReferenceValue.clear();
-
-                        destinationPort.pushOutgoing(std::move(msg));
-
-                        std::transform(m_reduceStates.flags.begin(),
-                                        m_reduceStates.flags.end(),
-                                        std::inserter(m_reduceStates.flags, m_reduceStates.flags.begin()),
-                                        [](auto& entry) { entry.second = false; return entry; });
-                    }
-                }
-                else {
-                    if(m_reduceStates.flags.size() == rxCount) { // i.e. getUpPortAmount() + 1
-                        spdlog::trace("Aggregate Switch({}): All reduce messages received from all up-ports and the same column down-port! Re-directing..", m_ID);
-
-                        auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-                        msg->m_data = std::move(m_reduceStates.value);
-                        m_reduceStates.value.clear();
-                        m_reduceStates.upPortReferenceValue.clear();
-
-                        destinationPort.pushOutgoing(std::move(msg));
-
-                        std::transform(m_reduceStates.flags.begin(),
-                                        m_reduceStates.flags.end(),
-                                        std::inserter(m_reduceStates.flags, m_reduceStates.flags.begin()),
-                                        [](auto& entry) { entry.second = false; return entry; });
-                    }
-                }
-            }
-        }
-        else {
-            m_reduceStates.destinationID = msg->m_destinationID.value();
-            m_reduceStates.opType        = msg->m_opType;
-            m_reduceStates.value         = std::move(msg->m_data);
-
-            if(!bDownPort) {
-                if(!m_reduceStates.upPortReferenceValue.empty()) {
-                    spdlog::critical("Aggregate Switch({}): Up-port reference value must have been empty!", m_ID);
-
-                    throw std::runtime_error("Aggregate Switch: Up-port reference value must have been empty!");
-                }
-
-                m_reduceStates.upPortReferenceValue = m_reduceStates.value;
-            }
-
-            m_reduceStates.flags.at(sourcePortIdx) = true;
-        }
-    }
-    else {
-        if(bOngoingRedirection) {
-            spdlog::error("Aggregate Switch({}): Switch was in the middle of a reduction through a down-port!", m_ID, sourcePortIdx);
-
-            throw std::runtime_error("Switch was in middle of a reduction through a down-port!");
-        }
-
-        // Re-direct to all up-ports
-        for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-            getUpPort(upPortIdx).pushOutgoing(std::make_unique<Messages::Reduce>(*msg));
-        }
-    }
-}
-
 void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
 {
     const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
@@ -653,6 +481,124 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
                                 state.receiveFlags.end(),
                                 std::inserter(state.receiveFlags, state.receiveFlags.begin()),
                                 [](auto& entry) { entry.second = false; return entry; });
+            }
+        }
+    }
+}
+
+void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg)
+{
+    if(!msg) {
+        spdlog::critical("Aggregate Switch({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Aggregate Switch: Null message given!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::critical("Aggregate Switch({}): Destination ID is not set in the reduce message!", m_ID);
+
+        throw std::runtime_error("Aggregate Switch: Destination ID is not set in the reduce message!");
+    }
+
+    if(msg->m_data.empty()) {
+        spdlog::critical("Aggregate Switch({}): Received an empty reduce message from source port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Aggregate Switch: Received an empty reduce message!");
+    }
+
+    if(msg->m_contributors.empty()) {
+        spdlog::critical("Aggregate Switch({}): Received a reduce message without contributors from source port #{}!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Aggregate Switch: Received a reduce message without contributors!");
+    }
+
+    // Decide on direction
+    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
+
+    if(bToUp) {
+        spdlog::trace("Aggregate Switch({}): Redirecting reduce message to an available up-port..", m_ID);
+
+        getAvailableUpPort().pushOutgoing(std::move(msg));
+
+        return;
+    }
+
+    if(m_reduceState.contributors.empty()) {
+        spdlog::trace("Aggregate Switch({}): First contributor to the reduce message!", m_ID);
+
+        m_reduceState.opType = msg->m_opType;
+        m_reduceState.value  = std::move(msg->m_data);
+        m_reduceState.contributors = std::move(msg->m_contributors);
+        m_reduceState.destinationID = msg->m_destinationID.value();
+    }
+    else {
+        if(m_reduceState.opType != msg->m_opType) {
+            spdlog::critical("Aggregate Switch({}): Operation type mismatch in reduce message!", m_ID);
+
+            throw std::runtime_error("Aggregate Switch: Operation type mismatch in reduce message!");
+        }
+
+        if(m_reduceState.value.size() != msg->m_data.size()) {
+            spdlog::critical("Aggregate Switch({}): Data size mismatch in reduce message!", m_ID);
+
+            throw std::runtime_error("Aggregate Switch: Data size mismatch in reduce message!");
+        }
+
+        if(m_reduceState.destinationID != msg->m_destinationID.value()) {
+            spdlog::critical("Aggregate Switch({}): Destination ID mismatch in reduce message!", m_ID);
+
+            throw std::runtime_error("Aggregate Switch: Destination ID mismatch in reduce message!");
+        }
+
+        for (const auto& contributor : msg->m_contributors) {
+            if(Network::Constants::getSubColumnIdxOfCompNode(contributor) != m_subColumnIdx) {
+                spdlog::critical("Aggregate Switch({}): Contributor computing node #{} is not in the same sub-column!", m_ID, contributor);
+
+                throw std::runtime_error("Aggregate Switch: Contributor computing node is not in the same sub-column!");
+            }
+
+            if (std::find(m_reduceState.contributors.begin(), m_reduceState.contributors.end(), contributor) != m_reduceState.contributors.end()) {
+                spdlog::critical("Aggregate Switch({}): Duplicate contribution from computing node #{} in reduce message!", m_ID, contributor);
+
+                throw std::runtime_error("Aggregate Switch: Duplicate contribution in reduce message!");
+            }
+        }
+
+        m_reduceState.contributors.insert(m_reduceState.contributors.end(), msg->m_contributors.cbegin(), msg->m_contributors.cend());
+
+        std::transform(m_reduceState.value.cbegin(),
+                       m_reduceState.value.cend(),
+                       msg->m_data.cbegin(),
+                       m_reduceState.value.begin(),
+                       [opType = m_reduceState.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+
+        static const auto sameSubColumnEdgeSwAmount = Network::Constants::getGroupAmount() - 1; // Exclude itself
+
+        // If the aggregate switch is placed in the same column with the destination computing node, it will only receive from up-ports
+        // The data will only be received from the same sub-column index aggregate(edge) switches
+        if(m_downPortTable.find(m_reduceState.destinationID)->second == getPort(m_sameColumnPortID)) {
+            if(m_reduceState.contributors.size() == (sameSubColumnEdgeSwAmount * getDownPortAmount())) {
+                // Send the reduced data to the destination computing node's edge switch
+                auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
+
+                txMsg->m_data = std::move(m_reduceState.value);
+                txMsg->m_contributors = std::move(m_reduceState.contributors);
+                txMsg->m_opType = m_reduceState.opType;
+
+                getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
+            }
+        }
+        else {
+            // If the aggregate switch is placed in a different column in the same group, it will receive from both up-ports and down-port connected to the same column edge switch
+            if(m_reduceState.contributors.size() == ((sameSubColumnEdgeSwAmount * getDownPortAmount()) + getDownPortAmount())) {
+                // Send the reduced data to the destination computing node's edge switch
+                auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
+
+                txMsg->m_data = std::move(m_reduceState.value);
+                txMsg->m_contributors = std::move(m_reduceState.contributors);
+                txMsg->m_opType = m_reduceState.opType;
+
+                m_downPortTable.find(m_reduceState.destinationID)->second.pushOutgoing(std::move(txMsg));
             }
         }
     }
