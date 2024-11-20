@@ -18,11 +18,6 @@ Core::Core(const size_t portAmount)
         m_barrierRequestFlags.insert({sourcePortIdx, false});
     }
 
-    // Initialize reduce requests
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
-        m_reduceStates.flags.insert({sourcePortIdx, false});
-    }
-
     // Initialize reduce-all requests
     for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_reduceAllStates.flags.insert({sourcePortIdx, false});
@@ -82,12 +77,12 @@ bool Core::tick()
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
                 break;
             }
-            case Messages::e_Type::Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce*>(anyMsg.release()))));
-                break;
-            }
             case Messages::e_Type::ReduceAll: {
                 process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                break;
+            }
+            case Messages::e_Type::IS_Reduce: {
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Scatter: {
@@ -180,93 +175,6 @@ void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Barrier
     }
 }
 
-void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg)
-{
-    // Process message
-    {
-        spdlog::trace("Core Switch({}): Received reduce message destined to computing node #{}.", m_ID, msg->m_destinationID.value());
-
-        // Check if this is the first reduce message
-        if(std::all_of(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return !entry.second; })) {
-            m_reduceStates.destinationID           = msg->m_destinationID.value();
-            m_reduceStates.destinationPortID       = m_reduceStates.destinationID / compNodePerPort;
-            m_reduceStates.opType                  = msg->m_opType;
-            m_reduceStates.value                   = std::move(msg->m_data);
-            m_reduceStates.flags.at(sourcePortIdx) = true;
-
-            if(m_reduceStates.destinationPortID == sourcePortIdx) {
-                spdlog::critical("Core Switch({}): Source port(#{}) was actually the target port!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Core Switch: Source port was actually the target port!");
-            }
-        }
-        else {
-            if(m_reduceStates.flags.at(sourcePortIdx)) {
-                spdlog::critical("Core Switch({}): Received multiple reduce messages from port #{}!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Core Switch: Received multiple reduce messages!");
-            }
-
-            if(msg->m_opType != m_reduceStates.opType) {
-                spdlog::critical("Core Switch({}): Wrong reduce operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(m_reduceStates.opType), Messages::toString(msg->m_opType));
-
-                throw std::runtime_error("Core Switch: Operation types doesn't match in reduce messages!");
-            }
-
-            if(m_reduceStates.destinationPortID == sourcePortIdx) {
-                spdlog::critical("Core Switch({}): Source port(#{}) was actually the target port!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Core Switch: Source port was actually the target port!");
-            }
-
-            if(m_reduceStates.destinationID != msg->m_destinationID.value()) {
-                spdlog::critical("Core Switch({}): Destination ID doesn't match! Expected {}, got {}", m_ID, m_reduceStates.destinationID, msg->m_destinationID.value());
-
-                throw std::runtime_error("Core Switch: Destination ID doesn't match in reduce messages!");
-            }
-
-            m_reduceStates.flags.at(sourcePortIdx) = true;
-            std::transform(m_reduceStates.value.cbegin(),
-                            m_reduceStates.value.cend(),
-                            msg->m_data.cbegin(),
-                            m_reduceStates.value.begin(),
-                            [opType = m_reduceStates.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
-        }
-    }
-
-    // Check if all reduce messages are received
-    {
-        const auto rxCount = std::count_if(m_reduceStates.flags.cbegin(), m_reduceStates.flags.cend(), [](const auto& entry) { return entry.second; });
-        if((m_reduceStates.flags.size() - 1) == rxCount) {
-            const auto targetPortIdx = m_reduceStates.destinationID / compNodePerPort;
-            spdlog::trace("Core Switch({}): Sending reduce message destined to computing node #{} to port #{}", m_ID, m_reduceStates.destinationID, targetPortIdx);
-
-            if(m_reduceStates.flags.at(targetPortIdx)) {
-                spdlog::critical("Core Switch({}): Target port(#{}) was actually a source port!", m_ID, targetPortIdx);
-
-                throw std::runtime_error("Core Switch: Target port was actually a source port!");
-            }
-
-            auto msg = std::make_unique<Messages::Reduce>(m_reduceStates.destinationID, m_reduceStates.opType);
-            msg->m_data = std::move(m_reduceStates.value);
-            m_reduceStates.value.clear();
-
-            m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
-
-            std::transform(m_reduceStates.flags.begin(),
-                            m_reduceStates.flags.end(),
-                            std::inserter(m_reduceStates.flags, m_reduceStates.flags.begin()),
-                            [](auto& entry) { entry.second = false; return entry; });
-
-            if(m_reduceStates.flags.size() != m_portAmount) {
-                spdlog::critical("Core Switch({}): Reduce flag map corrupted, size is {}!", m_ID, m_reduceStates.flags.size());
-
-                throw std::runtime_error("Core Switch: Reduce flag map corrupted!");
-            }
-        }
-    }
-}
-
 void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg)
 {
     // Process message
@@ -322,6 +230,22 @@ void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
             m_reduceAllStates.bOngoing = false;
         }
     }
+}
+
+void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg)
+{
+    spdlog::trace("Core Switch({}): Inter-switch reduce message received from port #{}", m_ID, sourcePortIdx);
+
+    const auto targetPortIdx = msg->m_destinationID.value() / compNodePerPort;
+    spdlog::trace("Core Switch({}): Re-directing to port #{}..", m_ID, targetPortIdx);
+
+    if(sourcePortIdx == targetPortIdx) {
+        spdlog::critical("Core Switch({}): Target and source ports are the same({})!", m_ID, sourcePortIdx);
+
+        throw std::runtime_error("Core Switch: Target and source ports are the same!");
+    }
+
+    m_ports.at(targetPortIdx).pushOutgoing(std::move(msg));
 }
 
 void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg)
