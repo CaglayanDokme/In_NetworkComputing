@@ -56,4 +56,40 @@ namespace Network::Constants {
 
         return  compNodeAmount;
     }
+
+    size_t getGroupAmount()
+    {
+        static const auto groupAmount = getPortPerSwitch();
+
+        return  groupAmount;
+    }
+
+    size_t getColumnAmount()
+    {
+        static const auto columnAmount = deriveEdgeSwitchAmount();
+
+        return  columnAmount;
+    }
+
+    size_t getSubColumnAmountPerGroup()
+    {
+        static const auto subColumnAmount = getColumnAmount() / getGroupAmount();
+
+        return  subColumnAmount;
+    }
+
+    size_t getColumnIdxOfCompNode(const size_t compNodeIdx)
+    {
+        static const auto compNodePerColumn = deriveComputingNodeAmount() / getColumnAmount();
+
+        return compNodeIdx / compNodePerColumn;
+    }
+
+    size_t getSubColumnIdxOfCompNode(const size_t compNodeIdx)
+    {
+        const auto columnIdx = getColumnIdxOfCompNode(compNodeIdx);
+
+        return columnIdx % getSubColumnAmountPerGroup();
+    }
+
 }

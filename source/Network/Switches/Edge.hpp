@@ -56,6 +56,7 @@ namespace Network::Switches {
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::AllGather> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
@@ -80,23 +81,32 @@ namespace Network::Switches {
         [[nodiscard]] size_t getDownPortAmount() const;
         [[nodiscard]] size_t getUpPortAmount() const;
 
+        /**
+         * @brief  Check if a computing node is connected to this switch
+         * @param  compNodeIdx Index of the computing node
+         * @return True if the computing node is connected
+         */
+        [[nodiscard]] bool isComputingNodeConnected(const size_t compNodeIdx) const;
+
     private: /** Members **/
         const size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
-        size_t m_nextPort{0};
+        size_t m_nextPort{0};                          // Index of the next port to be checked for an incoming message
         std::map<size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
         std::map<size_t, bool> m_barrierRequestFlags;  // Key: Down-port index, Value: True/False
         std::map<size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
 
-        struct {
-            struct {
-                bool bOngoing{false};                     // True if a reduce operation is ongoing
-                std::map<size_t, bool> receiveFlags; // Key: Port index, Value: True/False
-                size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
-                Messages::Reduce::OpType opType;          // Current operation type
-                decltype(Messages::Reduce::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-            } toUp, toDown;
+        size_t m_sameColumnPortID; // ID of the same-column up-port
 
-            size_t sameColumnPortID; // ID of the same-column up-port
+        struct ReduceState {
+            std::vector<size_t> m_contributors;         // Computing node IDs that contributed to the reduction
+            size_t m_destinationID;                     // ID of the destined computing node (i.e. root process of reduce operation)
+            Messages::Reduce::OpType m_opType;          // Current operation type
+            decltype(Messages::Reduce::m_data) m_value; // Current reduction value (e.g. Sum of received values, maximum of received values)
+
+            void push(const std::vector<size_t> &sourceIDs, const size_t destID, const Messages::Reduce::OpType opType, decltype(m_value) &&data);
+        };
+        struct  {
+            std::optional<ReduceState> toUp, toDown;
         } m_reduceStates;
 
         struct {

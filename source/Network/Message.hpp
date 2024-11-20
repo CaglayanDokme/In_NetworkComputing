@@ -20,6 +20,7 @@ namespace Network::Messages {
         AllGather,
 
         // Inter-switch messages
+        IS_Reduce,
         IS_Scatter,
         IS_Gather,
         IS_AllGather,
