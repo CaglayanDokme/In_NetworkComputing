@@ -80,7 +80,7 @@ namespace Network::Constants {
 
     size_t getColumnIdxOfCompNode(const size_t compNodeIdx)
     {
-        static const auto compNodePerColumn = getColumnAmount() / getColumnAmount();
+        static const auto compNodePerColumn = deriveComputingNodeAmount() / getColumnAmount();
 
         return compNodeIdx / compNodePerColumn;
     }

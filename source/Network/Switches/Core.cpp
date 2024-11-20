@@ -18,11 +18,6 @@ Core::Core(const size_t portAmount)
         m_barrierRequestFlags.insert({sourcePortIdx, false});
     }
 
-    // Initialize reduce requests
-    for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
-        m_reduceStates.flags.insert({sourcePortIdx, false});
-    }
-
     // Initialize reduce-all requests
     for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_reduceAllStates.flags.insert({sourcePortIdx, false});

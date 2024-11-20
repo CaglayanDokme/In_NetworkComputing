@@ -10,7 +10,7 @@ Aggregate::Aggregate(const size_t portAmount)
 {
     spdlog::trace("Created aggregate switch with ID #{}", m_ID);
 
-    m_subColumnIdx     = m_ID % Network::Constants::getColumnAmount();
+    m_subColumnIdx     = m_ID % Network::Constants::getSubColumnAmountPerGroup();
     m_sameColumnPortID = getUpPortAmount() + m_subColumnIdx;
 
     // Calculate look-up table for re-direction to down ports
@@ -530,6 +530,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         m_reduceState.value  = std::move(msg->m_data);
         m_reduceState.contributors = std::move(msg->m_contributors);
         m_reduceState.destinationID = msg->m_destinationID.value();
+
+        spdlog::trace("Aggregate Switch({}): Operation type is {}, destination ID is #{}.", m_ID, Messages::toString(m_reduceState.opType), m_reduceState.destinationID);
     }
     else {
         if(m_reduceState.opType != msg->m_opType) {

@@ -11,9 +11,8 @@ Edge::Edge(const size_t portAmount)
 {
     spdlog::trace("Created edge switch with ID #{}", m_ID);
 
-    static const size_t aggSwitchPerGroup = getDownPortAmount();
-    const size_t localColumnIdx = m_ID % aggSwitchPerGroup; // Column index in the group
-    m_sameColumnPortID = localColumnIdx;
+    const size_t subColumnIdx = m_ID % Network::Constants::getSubColumnAmountPerGroup();
+    m_sameColumnPortID = subColumnIdx;
 
     // Calculate look-up table for re-direction to down ports
     {
@@ -409,6 +408,12 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
         throw std::runtime_error("Edge Switch: Reduce message doesn't have a destination ID!");
     }
 
+    if(sourcePortIdx < getUpPortAmount()) {
+        spdlog::critical("Edge Switch({}): Received a reduce message from an up-port!", m_ID);
+
+        throw std::runtime_error("Edge Switch: Received a reduce message from an up-port!");
+    }
+
     // Decide on direction
     const bool bToUp = !isComputingNodeConnected(msg->m_destinationID.value());
 
@@ -434,7 +439,7 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
             state->m_destinationID = msg->m_destinationID.value();
             state->m_opType        = msg->m_opType;
             state->m_value         = std::move(msg->m_data);
-            state->m_contributors.push_back(sourcePortIdx);
+            state->m_contributors.push_back(msg->m_sourceID.value());
         }
         else {
             state->push({msg->m_sourceID.value()}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
@@ -467,6 +472,8 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
         }
 
         if(!state.has_value()) {
+            state.emplace();
+
             state->m_destinationID = msg->m_destinationID.value();
             state->m_opType        = msg->m_opType;
             state->m_value         = std::move(msg->m_data);
@@ -931,7 +938,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
         throw std::runtime_error("Edge: Reduce message doesn't have a destination ID!");
     }
 
-    if(isComputingNodeConnected(msg->m_destinationID.value())) {
+    if(!isComputingNodeConnected(msg->m_destinationID.value())) {
         spdlog::critical("Edge({}): Destined computing #{} isn't connected to this switch!", m_ID, msg->m_destinationID.value());
 
         throw std::runtime_error("Edge: Destined computing node isn't connected to this switch!");
@@ -953,10 +960,12 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
     }
 
     if(!state.has_value()) {
+        state.emplace();
+
         state->m_destinationID = msg->m_destinationID.value();
         state->m_opType        = msg->m_opType;
         state->m_value         = std::move(msg->m_data);
-        state->m_contributors.push_back(msg->m_sourceID.value());
+        state->m_contributors  = std::move(msg->m_contributors);
     }
     else {
         state->push({msg->m_contributors}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
