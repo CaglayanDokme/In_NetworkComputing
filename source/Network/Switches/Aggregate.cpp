@@ -564,6 +564,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
             }
         }
 
+        spdlog::trace("Aggregate Switch({}): Contributing to Reduce operation with {} computing nodes..", m_ID, msg->m_contributors.size());
+
         m_reduceState.contributors.insert(m_reduceState.contributors.end(), msg->m_contributors.cbegin(), msg->m_contributors.cend());
 
         std::transform(m_reduceState.value.cbegin(),
@@ -578,6 +580,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         // The data will only be received from the same sub-column index aggregate(edge) switches
         if(m_downPortTable.find(m_reduceState.destinationID)->second == getPort(m_sameColumnPortID)) {
             if(m_reduceState.contributors.size() == (sameSubColumnEdgeSwAmount * getDownPortAmount())) {
+                spdlog::trace("Aggregate Switch({}): Sending the reduced data down to the same column edge switch..", m_ID);
+
                 // Send the reduced data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
 
@@ -591,6 +595,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         else {
             // If the aggregate switch is placed in a different column in the same group, it will receive from both up-ports and down-port connected to the same column edge switch
             if(m_reduceState.contributors.size() == ((sameSubColumnEdgeSwAmount * getDownPortAmount()) + getDownPortAmount())) {
+                spdlog::trace("Aggregate Switch({}): Sending the reduced data down to a different column edge switch..", m_ID);
+
                 // Send the reduced data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
 
