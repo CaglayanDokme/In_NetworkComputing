@@ -698,7 +698,17 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
 
 void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
 {
-    spdlog::trace("Aggregate Switch({}): Gather message received from port #{}", m_ID, sourcePortIdx);
+    if(!msg) {
+        spdlog::critical("Aggregate Switch({}): Null message given!", m_ID);
+
+        throw std::invalid_argument("Aggregate Switch: Null message given!");
+    }
+
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::critical("Aggregate Switch({}): Destination ID is not set in the gather message!", m_ID);
+
+        throw std::runtime_error("Aggregate Switch: Destination ID is not set in the gather message!");
+    }
 
     if(msg->m_data.empty()) {
         spdlog::critical("Aggregate Switch({}): Received an empty gather message from source port #{}!", m_ID, sourcePortIdx);
@@ -706,37 +716,91 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         throw std::runtime_error("Aggregate Switch: Received an empty gather message!");
     }
 
-    const bool bDownPort = (sourcePortIdx >= getUpPortAmount());
+    // Decide on direction
+    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
 
-    if(bDownPort) {
-        // Decide on direction (up or down)
-        if(auto search = m_downPortTable.find(msg->m_destinationID.value()); search != m_downPortTable.end()) {
-            spdlog::trace("Aggregate Switch({}): Redirecting to a down-port..", m_ID);
+    if(bToUp) {
+        spdlog::trace("Aggregate Switch({}): Redirecting gather message to an available up-port..", m_ID);
 
-            if(getPort(sourcePortIdx) == search->second) {
-                spdlog::critical("Aggregate Switch({}): Gather message is destined to the same down-port!", m_ID);
+        getAvailableUpPort().pushOutgoing(std::move(msg));
 
-                throw std::runtime_error("Aggregate Switch: Gather message is destined to the same down-port!");
+        return;
+    }
+
+    if(m_gatherState.value.empty()) {
+        spdlog::trace("Aggregate Switch({}): First contributor to the gather message!", m_ID);
+
+        const auto refSize = msg->m_data.at(0).second.size();
+
+        for(const auto &entry : msg->m_data) {
+            if(entry.second.size() != refSize) {
+                spdlog::critical("Aggregate Switch({}): Data size mismatch in gather message!", m_ID);
+
+                throw std::runtime_error("Aggregate Switch: Data size mismatch in gather message!");
             }
-
-            search->second.pushOutgoing(std::move(msg));
         }
-        else {
-            spdlog::trace("Aggregate Switch({}): Redirecting to an up-port..", m_ID);
 
-            getAvailableUpPort().pushOutgoing(std::move(msg));
-        }
+        m_gatherState.value         = std::move(msg->m_data);
+        m_gatherState.destinationID = msg->m_destinationID.value();
     }
     else {
-        auto search = m_downPortTable.find(msg->m_destinationID.value());
+        if(m_gatherState.destinationID != msg->m_destinationID.value()) {
+            spdlog::critical("Aggregate Switch({}): Destination ID mismatch in gather message!", m_ID);
 
-        if(search == m_downPortTable.end()) {
-            spdlog::critical("Aggregate Switch({}): Gather message is not destined to a down-port!", m_ID);
-
-            throw std::runtime_error("Aggregate Switch: Gather message is not destined to a down-port!");
+            throw std::runtime_error("Aggregate Switch: Destination ID mismatch in gather message!");
         }
 
-        search->second.pushOutgoing(std::move(msg));
+        spdlog::trace("Aggregate Switch({}): Contributing to Gather operation with {} computing nodes..", m_ID, msg->m_data.size());
+
+        for(const auto &incomingEntry : msg->m_data) {
+            for(const auto &existingEntry : m_gatherState.value) {
+                if(incomingEntry.first == existingEntry.first) {
+                    spdlog::critical("Aggregate Switch({}): Duplicate contribution from computing node #{} in gather message!", m_ID, incomingEntry.first);
+
+                    throw std::runtime_error("Aggregate Switch: Duplicate contribution in gather message!");
+                }
+
+            }
+
+            if(incomingEntry.second.size() != m_gatherState.value.at(0).second.size()) {
+                spdlog::critical("Aggregate Switch({}): Data size mismatch in gather message! Expected {}, got {}", m_ID, m_gatherState.value.at(0).second.size(), incomingEntry.second.size());
+
+                throw std::runtime_error("Aggregate Switch: Data size mismatch in gather message!");
+            }
+        }
+
+        m_gatherState.value.reserve(m_gatherState.value.size() + msg->m_data.size());
+        m_gatherState.value.insert(m_gatherState.value.end(), msg->m_data.cbegin(), msg->m_data.cend());
+
+        static const auto sameSubColumnEdgeSwAmount = Network::Constants::getGroupAmount() - 1; // Exclude itself
+
+        // If the aggregate switch is placed in the same column with the destination computing node, it will only receive from up-ports
+        // The data will only be received from the same sub-column index aggregate(edge) switches
+        if(m_downPortTable.find(m_gatherState.destinationID)->second == getPort(m_sameColumnPortID)) {
+            if(m_gatherState.value.size() == (sameSubColumnEdgeSwAmount * getDownPortAmount())) {
+                spdlog::trace("Aggregate Switch({}): Sending the gathered data down to the same column edge switch..", m_ID);
+
+                // Send the gatherd data to the destination computing node's edge switch
+                auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(m_gatherState.destinationID);
+
+                txMsg->m_data = std::move(m_gatherState.value);
+
+                getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
+            }
+        }
+        else {
+            // If the aggregate switch is placed in a different column in the same group, it will receive from both up-ports and down-port connected to the same column edge switch
+            if(m_gatherState.value.size() == ((sameSubColumnEdgeSwAmount * getDownPortAmount()) + getDownPortAmount())) {
+                spdlog::trace("Aggregate Switch({}): Sending the gatherd data down to a different column edge switch..", m_ID);
+
+                // Send the gathered data to the destination computing node's edge switch
+                auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(m_gatherState.destinationID);
+
+                txMsg->m_data = std::move(m_gatherState.value);
+
+                m_downPortTable.find(m_gatherState.destinationID)->second.pushOutgoing(std::move(txMsg));
+            }
+        }
     }
 }
 
