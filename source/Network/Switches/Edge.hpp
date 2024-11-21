@@ -119,33 +119,20 @@ namespace Network::Switches {
         } m_reduceAllStates;
 
         struct GatherState {
-            struct {
-                bool bOngoing{false};                                  // True if a gather operation is ongoing
-                size_t destinationID;                             // ID of the destined computing node (i.e. root process of gather operation)
-                decltype(Messages::InterSwitch::Gather::m_data) value; // Current gathered value
-                size_t refSize;                                    // Expected size of the gathered data
-            } toUp;
+            std::vector<
+                std::pair<
+                    size_t,            // Source computing node ID
+                    std::vector<float> // Data to be gathered
+                >
+            > m_value;
 
-            struct ToDown {
-                bool bOngoing{false};                                   // True if a gather operation is ongoing
-                size_t destinationID;                              // ID of the destined computing node (i.e. root process of gather operation)
-                std::vector<decltype(Messages::Gather::m_data)> value;  // Current gathered value
-                size_t refSize;                                    // Expected size of the gathered data
+            size_t m_destinationID; // ID of the destined computing node (i.e. root process of gather operation)
 
-                /**
-                 * @brief Push data to the gather buffer
-                 * @param compNodeIdx Index of the computing node that sent the data
-                 * @param destID      ID of the destined computing node
-                 * @param data        Data to be gathered
-                 * @return True if the data is ready to be redirected to the destined computing node
-                 */
-                [[nodiscard]] bool push(const size_t compNodeIdx, const size_t destID, decltype(Messages::Gather::m_data) &&data);
+            void push(const size_t sourceID, const size_t destinationID, std::vector<float> &&data);
+        };
 
-                /**
-                 * @brief Reset the gather buffer to initial state
-                 */
-                void reset();
-            } toDown;
+        struct {
+            std::optional<GatherState> toUp, toDown;
         } m_gatherStates;
 
         struct AllGatherState {
