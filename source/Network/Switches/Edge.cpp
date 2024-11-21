@@ -710,7 +710,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter
     }
 }
 
-void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Gather> msg)
+void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::Gather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -718,118 +718,98 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Gather>
         throw std::invalid_argument("Edge: Null message given!");
     }
 
-    if(msg->m_data.empty()) {
-        spdlog::critical("Edge({}): Gather message cannot be empty!", m_ID);
+    if(!msg->m_destinationID.has_value()) {
+        spdlog::critical("Edge Switch({}): Gather message doesn't have a destination ID!", m_ID);
 
-        throw std::invalid_argument("Edge: Gather message cannot be empty!");
+        throw std::runtime_error("Edge Switch: Gather message doesn't have a destination ID!");
     }
 
     if(sourcePortIdx < getUpPortAmount()) {
-        spdlog::critical("Edge({}): Gather message received from up-port #{}!", m_ID, sourcePortIdx);
+        spdlog::critical("Edge Switch({}): Received a gather message from an up-port!", m_ID);
 
-        throw std::runtime_error("Edge: Gather message received from an up-port!");
+        throw std::runtime_error("Edge Switch: Received a gather message from an up-port!");
     }
 
-    const bool bToUp = (m_downPortTable.find(msg->m_destinationID.value()) == m_downPortTable.end());
+    // Decide on direction
+    const bool bToUp = !isComputingNodeConnected(msg->m_destinationID.value());
 
     if(bToUp) {
+        if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
+            spdlog::critical("Edge Switch({}): Received a gather message destined to up and from an up-port!", m_ID);
+
+            throw std::runtime_error("Edge Switch: Received a gather message destined to up and from an up-port!");
+        }
+
         auto &state = m_gatherStates.toUp;
 
-        if(m_gatherStates.toDown.bOngoing) {
-            spdlog::critical("Edge({}): Ongoing transfer to-down!", m_ID);
+        // Check if there was an ongoing transfer to down
+        if(m_gatherStates.toDown.has_value()) {
+            spdlog::critical("Edge Switch({}): Ongoing gather operation to down!", m_ID);
 
-            throw std::runtime_error("Edge: Ongoing transfer to-down!");
+            throw std::runtime_error("Edge Switch: Ongoing gather operation to down!");
         }
 
-        if(state.bOngoing) {
-            if(state.value.size() != getDownPortAmount()) {
-                spdlog::critical("Edge({}): Gather state value size is corrupted! Expected size {}, detected {}", m_ID, getDownPortAmount(), state.value.size());
+        if(!state.has_value()) {
+            state.emplace();
 
-                throw std::runtime_error("Edge: Gather state value size is corrupted!");
-            }
-
-            if(state.destinationID != msg->m_destinationID.value()) {
-                spdlog::critical("Edge({}): Destination IDs mismatch in gather messages! Expected {}, received {}", m_ID, state.destinationID, msg->m_destinationID.value());
-
-                throw std::runtime_error("Edge: Destination IDs mismatch in gather messages!");
-            }
-
-            if(state.refSize != msg->m_data.size()) {
-                spdlog::critical("Edge({}): Data size mismatch in gather messages! Expected {}, received {}", m_ID, state.refSize, msg->m_data.size());
-
-                throw std::runtime_error("Edge: Data size mismatch in gather messages!");
-            }
-
-            const auto sourceID = state.value.at(sourcePortIdx - getUpPortAmount()).first;
-            if(m_downPortTable.at(sourceID) != getPort(sourcePortIdx)) {
-                spdlog::critical("Edge({}): Source ID({}) and source port index({}) didn't match in gather message!", m_ID, sourceID, sourcePortIdx);
-
-                throw std::runtime_error("Edge: Source ID and source port index didn't match in gather message!");
-            }
-
-            auto &data = state.value.at(sourcePortIdx - getUpPortAmount()).second;
-
-            if(!data.empty()) {
-                spdlog::critical("Edge({}): This port({}) has already sent a gather message!", m_ID, sourcePortIdx);
-
-                throw std::runtime_error("Edge: This port has already sent a gather message!");
-            }
-
-            data = std::move(msg->m_data);
-
-            // Re-direct
-            if(std::all_of(state.value.cbegin(), state.value.cend(), [](const auto &entry) { return !entry.second.empty(); })) {
-                auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(state.destinationID);
-
-                for(auto &pair : state.value) {
-                    txMsg->m_data.push_back({pair.first, std::move(pair.second)});
-                }
-
-                getAvailableUpPort().pushOutgoing(std::move(txMsg));
-
-                // Reset state
-                state.bOngoing = false;
-                state.destinationID = Constants::deriveComputingNodeAmount();
-            }
+            state->m_destinationID = msg->m_destinationID.value();
+            state->m_value.push_back({msg->m_sourceID.value(), std::move(msg->m_data)});
         }
         else {
-            state.bOngoing = true;
-            state.destinationID = msg->m_destinationID.value();
+            state->push(msg->m_sourceID.value(), msg->m_destinationID.value(), std::move(msg->m_data));
 
-            if(state.value.size() != getDownPortAmount()) {
-                spdlog::critical("Edge({}): Gather state value size is corrupted! Expected size {}, detected {}", m_ID, getDownPortAmount(), state.value.size());
+            // Check if all down-ports have sent message
+            if(state->m_value.size() == getDownPortAmount()) {
+                spdlog::trace("Edge Switch({}): Sending the gathered data to the same column up-port #{}", m_ID, m_sameColumnPortID);
 
-                throw std::runtime_error("Edge: Gather state value size is corrupted!");
+                // Send gathered message to the same column up-port
+                auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(msg->m_destinationID.value());
+
+                txMsg->m_data = std::move(state->m_value);
+
+                getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
+
+                state.reset();
             }
-
-            for(auto &entry : state.value) {
-                entry.second.clear();
-            }
-
-            state.value.at(sourcePortIdx - getUpPortAmount()).second = std::move(msg->m_data);
-            state.refSize = state.value.at(sourcePortIdx - getUpPortAmount()).second.size();
         }
     }
     else {
         auto &state = m_gatherStates.toDown;
 
-        if(state.push(firstCompNodeIdx + (sourcePortIdx - getUpPortAmount()), msg->m_destinationID.value(), std::move(msg->m_data))) {
-            auto txMsg = std::make_unique<Messages::Gather>(state.destinationID);
+        // Check if there was an ongoing transfer to up
+        if(m_gatherStates.toUp.has_value()) {
+            spdlog::critical("Edge Switch({}): Ongoing gather operation to up!", m_ID);
 
-            txMsg->m_data.reserve(std::accumulate(state.value.cbegin(), state.value.cend(), 0, [](int sum, const auto &elem) { return sum + elem.size(); }));
+            throw std::runtime_error("Edge Switch: Ongoing gather operation to up!");
+        }
 
-            for(auto &data : state.value) {
-                if(data.empty()) {
-                    continue;
+        if(!state.has_value()) {
+            state.emplace();
+
+            state->m_destinationID = msg->m_destinationID.value();
+            state->m_value.push_back({msg->m_sourceID.value(), std::move(msg->m_data)});
+        }
+        else {
+            state->push(msg->m_sourceID.value(), msg->m_destinationID.value(), std::move(msg->m_data));
+
+            if(state->m_value.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+                auto txMsg = std::make_unique<Messages::Gather>(state->m_destinationID);
+
+                std::sort(state->m_value.begin(), state->m_value.end(), [](const auto &a, const auto &b) {
+                    return a.first < b.first;
+                });
+
+                txMsg->m_data.reserve(state->m_value.at(0).second.size() * state->m_value.size());
+
+                for(auto &entry : state->m_value) {
+                    txMsg->m_data.insert(txMsg->m_data.end(), std::make_move_iterator(entry.second.begin()), std::make_move_iterator(entry.second.end()));
                 }
+                state->m_value.clear();
 
-                txMsg->m_data.insert(txMsg->m_data.end(), data.cbegin(), data.cend());
+                m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
+
+                state.reset();
             }
-
-            m_downPortTable.at(state.destinationID).pushOutgoing(std::move(txMsg));
-
-            // Reset state
-            state.reset();
         }
     }
 }
@@ -1010,7 +990,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
     }
 }
 
-void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<Messages::Gather> msg)
+void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg)
 {
     if(!msg) {
         spdlog::critical("Edge({}): Null message given!", m_ID);
@@ -1019,97 +999,60 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
     }
 
     if(!msg->m_destinationID.has_value()) {
-        spdlog::critical("Edge Switch({}): Gather message doesn't have a destination ID!", m_ID);
+        spdlog::critical("Edge({}): Gather message doesn't have a destination ID!", m_ID);
 
-        throw std::runtime_error("Edge Switch: Gather message doesn't have a destination ID!");
+        throw std::runtime_error("Edge: Gather message doesn't have a destination ID!");
     }
 
-    if(sourcePortIdx < getUpPortAmount()) {
-        spdlog::critical("Edge Switch({}): Received a gather message from an up-port!", m_ID);
+    if(!isComputingNodeConnected(msg->m_destinationID.value())) {
+        spdlog::critical("Edge({}): Destined computing #{} isn't connected to this switch!", m_ID, msg->m_destinationID.value());
 
-        throw std::runtime_error("Edge Switch: Received a gather message from an up-port!");
+        throw std::runtime_error("Edge: Destined computing node isn't connected to this switch!");
     }
 
-    // Decide on direction
-    const bool bToUp = !isComputingNodeConnected(msg->m_destinationID.value());
+    if(sourcePortIdx >= getUpPortAmount()) {
+        spdlog::critical("Edge({}): Gather message received from a down-port!", m_ID);
 
-    if(bToUp) {
-        if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
-            spdlog::critical("Edge Switch({}): Received a gather message destined to up and from an up-port!", m_ID);
+        throw std::runtime_error("Edge: Gather message received from a down-port!");
+    }
 
-            throw std::runtime_error("Edge Switch: Received a gather message destined to up and from an up-port!");
-        }
+    auto &state = m_gatherStates.toDown;
 
-        auto &state = m_gatherStates.toUp;
+    // Check if there was an ongoing transfer to up
+    if(m_reduceStates.toUp.has_value()) {
+        spdlog::critical("Edge Switch({}): Ongoing gather operation to up!", m_ID);
 
-        // Check if there was an ongoing transfer to down
-        if(m_gatherStates.toDown.has_value()) {
-            spdlog::critical("Edge Switch({}): Ongoing gather operation to down!", m_ID);
+        throw std::runtime_error("Edge Switch: Ongoing gather operation to up!");
+    }
 
-            throw std::runtime_error("Edge Switch: Ongoing gather operation to down!");
-        }
+    if(!state.has_value()) {
+        state.emplace();
 
-        if(!state.has_value()) {
-            state.emplace();
-
-            state->m_destinationID = msg->m_destinationID.value();
-            state->m_value.push_back({msg->m_sourceID.value(), std::move(msg->m_data)});
-        }
-        else {
-            state->push(msg->m_sourceID.value(), msg->m_destinationID.value(), std::move(msg->m_data));
-
-            // Check if all down-ports have sent message
-            if(state->m_value.size() == getDownPortAmount()) {
-                spdlog::trace("Edge Switch({}): Sending the gathered data to the same column up-port #{}", m_ID, m_sameColumnPortID);
-
-                // Send gathered message to the same column up-port
-                auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(msg->m_destinationID.value());
-
-                txMsg->m_data = std::move(state->m_value);
-
-                getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
-
-                state.reset();
-            }
-        }
+        state->m_destinationID = msg->m_destinationID.value();
+        state->m_value         = std::move(msg->m_data);
     }
     else {
-        auto &state = m_gatherStates.toDown;
-
-        // Check if there was an ongoing transfer to up
-        if(m_gatherStates.toUp.has_value()) {
-            spdlog::critical("Edge Switch({}): Ongoing gather operation to up!", m_ID);
-
-            throw std::runtime_error("Edge Switch: Ongoing gather operation to up!");
+        for(auto &entry : msg->m_data) {
+            state->push(entry.first, msg->m_destinationID.value(), std::move(entry.second));
         }
 
-        if(!state.has_value()) {
-            state.emplace();
+        if(state->m_value.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
+            auto txMsg = std::make_unique<Messages::Gather>(state->m_destinationID);
 
-            state->m_destinationID = msg->m_destinationID.value();
-            state->m_value.push_back({msg->m_sourceID.value(), std::move(msg->m_data)});
-        }
-        else {
-            state->push(msg->m_sourceID.value(), msg->m_destinationID.value(), std::move(msg->m_data));
+            std::sort(state->m_value.begin(), state->m_value.end(), [](const auto &a, const auto &b) {
+                return a.first < b.first;
+            });
 
-            if(state->m_value.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
-                auto txMsg = std::make_unique<Messages::Gather>(state->m_destinationID);
+            txMsg->m_data.reserve(state->m_value.at(0).second.size() * state->m_value.size());
 
-                std::sort(state->m_value.begin(), state->m_value.end(), [](const auto &a, const auto &b) {
-                    return a.first < b.first;
-                });
-
-                txMsg->m_data.reserve(state->m_value.at(0).second.size() * state->m_value.size());
-
-                for(auto &entry : state->m_value) {
-                    txMsg->m_data.insert(txMsg->m_data.end(), std::make_move_iterator(entry.second.begin()), std::make_move_iterator(entry.second.end()));
-                }
-                state->m_value.clear();
-
-                m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
-
-                state.reset();
+            for(auto &entry : state->m_value) {
+                txMsg->m_data.insert(txMsg->m_data.end(), std::make_move_iterator(entry.second.begin()), std::make_move_iterator(entry.second.end()));
             }
+            state->m_value.clear();
+
+            m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
+
+            state.reset();
         }
     }
 }
@@ -1318,21 +1261,11 @@ void Edge::GatherState::push(const size_t sourceID, const size_t destinationID, 
         throw std::runtime_error("Edge Switch: Data size mismatch in gather messages!");
     }
 
-    if(std::find(m_value.cbegin(), m_value.cend(), [sourceID](const auto &entry) { return (entry.first == sourceID); }) != m_value.cend()) {
+    if(std::find_if(m_value.cbegin(), m_value.cend(), [sourceID](const auto &entry) { return (entry.first == sourceID); }) != m_value.cend()) {
         spdlog::critical("Edge Switch: Computing node #{} has already sent a gather message!", sourceID);
 
         throw std::runtime_error("Edge Switch: Computing node has already sent a gather message!");
     }
 
     m_value.push_back({sourceID, std::move(data)});
-}
-
-void Edge::GatherState::ToDown::reset()
-{
-    bOngoing = false;
-    destinationID = Constants::deriveComputingNodeAmount();
-
-    for(auto &entry : value) {
-        entry.clear();
-    }
 }
