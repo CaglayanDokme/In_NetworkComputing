@@ -1,9 +1,21 @@
 #pragma once
 
 #include "Network/Message.hpp"
+#include <vector>
 #include <string>
 
 namespace Network::Messages::InterSwitch {
+    class Reduce : public BaseMessage {
+    public: /** Construction **/
+        Reduce() = delete;
+        explicit Reduce(const size_t destinationID);
+
+    public: /** Data **/
+        std::vector<size_t> m_contributors; // Computing node IDs that contributed to the reduction
+        std::vector<float> m_data;
+        ReduceOperation m_opType;
+    };
+
     class Scatter : public BaseMessage {
     public: /** Construction **/
         Scatter() = delete;
@@ -12,8 +24,8 @@ namespace Network::Messages::InterSwitch {
     public: /** Data **/
         std::vector<
             std::pair<
-                size_t,                         // Destination computing node ID
-                decltype(Messages::Scatter::m_data)  // Data to be scattered
+                size_t,            // Destination computing node ID
+                std::vector<float> // Data to be scattered
             >
         > m_data;
     };
@@ -26,8 +38,8 @@ namespace Network::Messages::InterSwitch {
     public: /** Data **/
         std::vector<
             std::pair<
-                size_t,                        // Source computing node ID
-                decltype(Messages::Gather::m_data)  // Data to be gathered
+                size_t,            // Source computing node ID
+                std::vector<float> // Data to be gathered
             >
         > m_data;
     };
@@ -39,8 +51,8 @@ namespace Network::Messages::InterSwitch {
     public: /** Data **/
         std::vector<
             std::pair<
-                size_t,                           // Source computing node ID
-                decltype(Messages::AllGather::m_data)  // Data to be gathered
+                size_t,            // Source computing node ID
+                std::vector<float> // Data to be gathered
             >
         > m_data;
     };
