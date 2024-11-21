@@ -1025,9 +1025,9 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
     }
 
     if(sourcePortIdx < getUpPortAmount()) {
-        spdlog::critical("Edge Switch({}): Received a reduce message from an up-port!", m_ID);
+        spdlog::critical("Edge Switch({}): Received a gather message from an up-port!", m_ID);
 
-        throw std::runtime_error("Edge Switch: Received a reduce message from an up-port!");
+        throw std::runtime_error("Edge Switch: Received a gather message from an up-port!");
     }
 
     // Decide on direction
@@ -1035,18 +1035,18 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
 
     if(bToUp) {
         if(sourcePortIdx < getUpPortAmount()) { // Coming from an up-port
-            spdlog::critical("Edge Switch({}): Received a reduce message destined to up and from an up-port!", m_ID);
+            spdlog::critical("Edge Switch({}): Received a gather message destined to up and from an up-port!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Received a reduce message destined to up and from an up-port!");
+            throw std::runtime_error("Edge Switch: Received a gather message destined to up and from an up-port!");
         }
 
         auto &state = m_gatherStates.toUp;
 
         // Check if there was an ongoing transfer to down
         if(m_gatherStates.toDown.has_value()) {
-            spdlog::critical("Edge Switch({}): Ongoing reduce operation to down!", m_ID);
+            spdlog::critical("Edge Switch({}): Ongoing gather operation to down!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Ongoing reduce operation to down!");
+            throw std::runtime_error("Edge Switch: Ongoing gather operation to down!");
         }
 
         if(!state.has_value()) {
@@ -1060,9 +1060,9 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
 
             // Check if all down-ports have sent message
             if(state->m_value.size() == getDownPortAmount()) {
-                spdlog::trace("Edge Switch({}): Sending the reduced data to the same column up-port #{}", m_ID, m_sameColumnPortID);
+                spdlog::trace("Edge Switch({}): Sending the gathered data to the same column up-port #{}", m_ID, m_sameColumnPortID);
 
-                // Send reduced message to the same column up-port
+                // Send gathered message to the same column up-port
                 auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(msg->m_destinationID.value());
 
                 txMsg->m_data = std::move(state->m_value);
@@ -1078,9 +1078,9 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
 
         // Check if there was an ongoing transfer to up
         if(m_gatherStates.toUp.has_value()) {
-            spdlog::critical("Edge Switch({}): Ongoing reduce operation to up!", m_ID);
+            spdlog::critical("Edge Switch({}): Ongoing gather operation to up!", m_ID);
 
-            throw std::runtime_error("Edge Switch: Ongoing reduce operation to up!");
+            throw std::runtime_error("Edge Switch: Ongoing gather operation to up!");
         }
 
         if(!state.has_value()) {
