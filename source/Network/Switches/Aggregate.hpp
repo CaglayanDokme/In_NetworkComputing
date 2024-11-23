@@ -105,6 +105,17 @@ namespace Network::Switches {
         } m_reduceAllStates;
 
         struct {
+            std::vector<
+                std::pair<
+                    size_t,            // Source computing node ID
+                    std::vector<float> // Data to be gathered
+                >
+            > value;
+
+            size_t destinationID; // ID of the destined computing node (i.e. root process of gather operation)
+        } m_gatherState; // We only need state for messages directed to down-ports, up-port destined messages are redirected immediately
+
+        struct {
             struct {
                 bool bOngoing{false};                                       // True if an all-gather operation is ongoing
                 std::map<size_t, bool> receiveFlags;                   // Key: Port index (Only down-ports or only up-ports), Value: True/False
