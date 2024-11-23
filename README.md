@@ -20,6 +20,14 @@ Writing and building a custom parallel application within the simulator is descr
 The only external dependency of the program is [spdlog v1.9.2](https://github.com/gabime/spdlog) library which is used for logging events in the program.
 You can directly install it from APT repositories. Just run `sudo apt install libspdlog1`.
 
+#### Ubuntu 24
+spdlog installation is a bit different in Ubuntu 24. You can install it by running the following commands.
+```shell
+sudo apt update
+sudo apt install libspdlog1.12
+sudo apt install libspdlog-dev
+```
+
 ### Implementing Custom Parallel Applications
 The program is designed to ease migrations from traditional MPI-based programs. So, the programming interface is quite similar to that.
 Just like you were writing a program using the MPI library, you need to write a program in the [`Computer::task(..)`](source/Computer.cpp) function.

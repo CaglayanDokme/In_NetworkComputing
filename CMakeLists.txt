@@ -35,7 +35,9 @@ set(HEADERS
 )
 
 find_package(spdlog REQUIRED)
+find_package(fmt REQUIRED)
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE spdlog)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE fmt)
