@@ -61,6 +61,25 @@ def plot_bandwidth_usage_byte(inc_enabled, traditional):
     plt.savefig('results/BandwidthUsage_Byte.png', bbox_inches='tight')
     plt.close()
 
+def plot_compl_time_diff(inc_enabled, traditional):
+    plt.figure(figsize=(14, 7))
+    plt.plot(inc_enabled['CompNodes'], inc_enabled['ComplTimeDiff'], label='INC-enabled', marker='o')
+    plt.plot(traditional['CompNodes'], traditional['ComplTimeDiff'], label='Traditional', marker='D')
+    plt.title('Completion Time Variation', fontweight='bold', fontsize=18)
+    plt.xlabel('Computing Nodes', fontsize=14, fontweight='bold')
+    plt.ylabel('Max. Completion Time Difference (Ticks)', fontsize=14, fontweight='bold')
+    plt.legend(loc='upper left', fontsize=12)
+    plt.grid(True)
+    plt.xscale('log')
+    plt.yscale('linear')
+    max_comp_nodes = max(inc_enabled['CompNodes'].max(), traditional['CompNodes'].max())
+    min_comp_nodes = min(inc_enabled['CompNodes'].min(), traditional['CompNodes'].min())
+    ticks = np.logspace(np.log10(min_comp_nodes), np.log10(max_comp_nodes), num=10)
+    plt.xticks(ticks, [f'{int(tick):,}' for tick in ticks])
+    plt.tight_layout(pad=0.1)
+    plt.savefig('results/ComplTimeDiff.png', bbox_inches='tight')
+    plt.close()
+
 def visualize_data(csv_file_path='result.csv'):
     if not os.path.exists(csv_file_path):
         print(f"File not found: {csv_file_path}")
@@ -78,6 +97,7 @@ def visualize_data(csv_file_path='result.csv'):
     plot_timing_cost(inc_enabled, traditional)
     plot_bandwidth_usage_msg(inc_enabled, traditional)
     plot_bandwidth_usage_byte(inc_enabled, traditional)
+    plot_compl_time_diff(inc_enabled, traditional)
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
