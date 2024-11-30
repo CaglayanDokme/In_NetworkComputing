@@ -34,7 +34,7 @@ set(HEADERS
     source/Network/Constants.hpp
 )
 
-find_package(spdlog REQUIRED)
+find_package(spdlog 1.15.0 EXACT REQUIRED)
 find_package(fmt REQUIRED)
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS})
