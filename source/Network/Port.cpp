@@ -6,6 +6,10 @@
 using namespace Network;
 
 namespace PortDelays {
+    // Some arbitrary values
+
+    static constexpr size_t baseIncomingDelay = 3;
+    static constexpr size_t baseOutgoingDelay = 3;
     static constexpr size_t bytePerTick = 100;
 };
 
@@ -29,7 +33,7 @@ void Port::pushIncoming(UniqueMsg msg)
     }
 
     const auto size = msg->size();
-    const auto delay = size / PortDelays::bytePerTick;
+    const auto delay = PortDelays::baseIncomingDelay + (size / PortDelays::bytePerTick);
 
     m_incoming.emplace_back(std::move(msg), delay);
 }
@@ -43,7 +47,7 @@ void Port::pushOutgoing(UniqueMsg msg)
     }
 
     const auto size = msg->size();
-    const auto delay = size / PortDelays::bytePerTick;
+    const auto delay = PortDelays::baseOutgoingDelay + (size / PortDelays::bytePerTick);
 
     m_outgoing.emplace_back(std::move(msg), delay);
 }
