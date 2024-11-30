@@ -447,58 +447,6 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                 send(std::move(msg));
             }
         }
-
-        // Wait for acknowledgements
-        {
-            std::unique_lock lock(m_acknowledge.mutex);
-
-            std::vector<bool> acks(compNodeAmount, false);
-            acks.at(m_ID) = true; // Skip the broadcaster
-
-            {
-                std::erase_if(m_acknowledge.messages, [&](auto &&msg) {
-                    if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
-                        return false;
-                    }
-
-                    if(acks.at(msg->m_sourceID.value())) {
-                        spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
-
-                        throw std::logic_error("MPI: Duplicate acknowledgement!");
-                    }
-
-                    spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
-                    acks.at(msg->m_sourceID.value()) = true;
-
-                    return true;
-                });
-            }
-
-            while(!std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
-                spdlog::trace("MPI({}): Waiting for broadcast acknowledgements..", m_ID);
-                m_acknowledge.notifier.wait(lock, [&]() { return !m_acknowledge.messages.empty(); });
-
-                const auto &msg = *m_acknowledge.messages.back();
-
-                if(Messages::e_Type::BroadcastMessage != msg.m_ackType) {
-                    spdlog::warn("MPI({}): While waiting for broadcast acknowledge, received acknowledgement of another type({})!", m_ID, msg.typeToString());
-
-                    continue;
-                }
-
-                if(acks.at(msg.m_sourceID.value())) {
-                    spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
-
-                    throw std::logic_error("MPI: Duplicate acknowledgement!");
-                }
-
-                spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
-                acks.at(msg.m_sourceID.value()) = true;
-                m_acknowledge.messages.pop_back();
-            }
-
-            spdlog::trace("MPI({}): Received all acknowledgements", m_ID);
-        }
     }
     else {
         if(!data.empty()) {
@@ -549,14 +497,6 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             m_broadcastReceive.messages.pop_back();
 
             break;
-        }
-
-        // Send an acknowledgement
-        {
-            auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
-            send(std::move(msg));
-
-            spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
 
