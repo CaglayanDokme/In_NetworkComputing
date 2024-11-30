@@ -10,6 +10,13 @@ namespace Network::Messages::InterSwitch {
         Reduce() = delete;
         explicit Reduce(const size_t destinationID);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         std::vector<size_t> m_contributors; // Computing node IDs that contributed to the reduction
         std::vector<float> m_data;
@@ -20,6 +27,13 @@ namespace Network::Messages::InterSwitch {
     public: /** Construction **/
         Scatter() = delete;
         explicit Scatter(const size_t sourceID);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
 
     public: /** Data **/
         std::vector<
@@ -35,6 +49,13 @@ namespace Network::Messages::InterSwitch {
         Gather() = delete;
         explicit Gather(const size_t destinationID);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         std::vector<
             std::pair<
@@ -47,6 +68,13 @@ namespace Network::Messages::InterSwitch {
     class AllGather : public BaseMessage {
     public: /** Construction **/
         AllGather();
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
 
     public: /** Data **/
         std::vector<

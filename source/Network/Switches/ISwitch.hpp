@@ -20,6 +20,7 @@ namespace Network::Switches {
     public: /** Struct Declarations **/
         struct Statistics {
             size_t totalProcessedMessages;
+            size_t totalProcessedBytes;
         };
 
     protected: /** Construction **/
