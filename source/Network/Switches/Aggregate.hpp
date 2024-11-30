@@ -51,8 +51,8 @@ namespace Network::Switches {
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
-        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
@@ -82,17 +82,18 @@ namespace Network::Switches {
         const size_t firstCompNodeIdx;
         size_t m_nextPort{0};
         std::map<size_t, Port&> m_downPortTable; // Re-direction table for down-ports
+        size_t m_subColumnIdx;                   // Index of the sub-column this aggregate switch belongs to (i.e. index of the column in group)
+        size_t m_sameColumnPortID;               // ID of the same-column down-port
+
         std::map<size_t, bool> m_barrierRequestFlags; // Key: Down-port index, Value: True/False
         std::map<size_t, bool> m_barrierReleaseFlags; // Key: Computation node index, Value: True/False
 
         struct {
-            size_t sameColumnPortID;                            // ID of the same-column down-port
-            std::map<size_t, bool> flags;                       // Key: Port index, Value: True/False (Only the up-ports and the same-column down-port index used)
-            size_t destinationID;                               // ID of the destined computing node (i.e. root process of reduce operation)
-            Messages::Reduce::OpType opType;                         // Current operation type
-            decltype(Messages::Reduce::m_data) upPortReferenceValue; // Reference value for up-ports (Set with first value received, all other values must be the same)
-            decltype(Messages::Reduce::m_data) value;                // Current reduction value (e.g. Sum of received values, maximum of received values)
-        } m_reduceStates; // Down-port reduce redirection states
+            std::vector<size_t> contributors;                 // Computing node IDs that contributed to the reduction
+            size_t destinationID;                             // ID of the destined computing node (i.e. root process of reduce operation)
+            Messages::Reduce::OpType opType;                  // Current operation type
+            decltype(Messages::Reduce::m_data) value;         // Current reduction value (e.g. Sum of received values, maximum of received values)
+        } m_reduceState; // We only need state for messages directed to down-ports, up-port destined messages are redirected immediately
 
         struct {
             struct {
@@ -102,6 +103,17 @@ namespace Network::Switches {
                 decltype(Messages::ReduceAll::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
             } toUp, toDown;
         } m_reduceAllStates;
+
+        struct {
+            std::vector<
+                std::pair<
+                    size_t,            // Source computing node ID
+                    std::vector<float> // Data to be gathered
+                >
+            > value;
+
+            size_t destinationID; // ID of the destined computing node (i.e. root process of gather operation)
+        } m_gatherState; // We only need state for messages directed to down-ports, up-port destined messages are redirected immediately
 
         struct {
             struct {
