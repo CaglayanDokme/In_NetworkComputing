@@ -50,6 +50,7 @@ bool Core::tick()
 
         bMsgReceived = true;
         ++m_statistics.totalProcessedMessages;
+        m_statistics.totalProcessedBytes += anyMsg->size();
 
         spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
 

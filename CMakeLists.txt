@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.22)
 project(In_NetworkComputing)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -34,7 +34,7 @@ set(HEADERS
     source/Network/Constants.hpp
 )
 
-find_package(spdlog REQUIRED)
+find_package(spdlog 1.15.0 EXACT REQUIRED)
 find_package(fmt REQUIRED)
 
 add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS})

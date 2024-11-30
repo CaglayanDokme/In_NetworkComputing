@@ -292,25 +292,15 @@ int main(const int argc, const char *const argv[])
         csvFile << "INC"
                 << ',' << "Ports"
                 << ',' << "CompNodes"
-                << ',' << "TotalTicks"
-
                 << ',' << "TimingCost"
-                << ',' << "BandwidthUsage"
+                << ',' << "BandwidthUsage_Msg"
+                << ',' << "BandwidthUsage_Byte"
                 << ',' << "ComplTimeDiff"
 
                 << '\n';
     }
 
-    const auto timingCost = [&]() {
-        size_t maxDuration = 0;
-
-        for(auto &compNode : computeNodes) {
-            maxDuration = std::max(maxDuration, compNode.getStatistics().mpi.reduce.lastDuration());
-        }
-
-        return maxDuration;
-    }();
-    const auto bandwidthUsage = [&]() {
+    const auto bandwidthUsage_Msg = [&]() {
         size_t totalUsage = 0;
 
         for(const auto &sw : coreSwitches) {
@@ -327,6 +317,25 @@ int main(const int argc, const char *const argv[])
 
         return totalUsage;
     }();
+
+    const auto bandwidthUsage_Byte = [&]() {
+        size_t totalUsage = 0;
+
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        return totalUsage;
+    }();
+
     const auto complTimeDiff = [&]() {
         size_t maxComplTime = 0;
         size_t minComplTime = std::numeric_limits<size_t>::max();
@@ -345,9 +354,8 @@ int main(const int argc, const char *const argv[])
             << ',' << portPerSwitch
             << ',' << compNodeAmount
             << ',' << tick
-
-            << ',' << timingCost
-            << ',' << bandwidthUsage
+            << ',' << bandwidthUsage_Msg
+            << ',' << bandwidthUsage_Byte
             << ',' << complTimeDiff
 
             << '\n';

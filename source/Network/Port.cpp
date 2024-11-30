@@ -6,9 +6,12 @@
 using namespace Network;
 
 namespace PortDelays {
-    static constexpr size_t incomingMsg = 5;
-    static constexpr size_t outgoingMsg = 3;
-}
+    // Some arbitrary values
+
+    static constexpr size_t baseIncomingDelay = 3;
+    static constexpr size_t baseOutgoingDelay = 3;
+    static constexpr size_t bytePerTick = 100;
+};
 
 bool Port::operator==(const Port &port) const
 {
@@ -23,12 +26,30 @@ Port::st_Msg::st_Msg(UniqueMsg data, const size_t &delay)
 
 void Port::pushIncoming(UniqueMsg msg)
 {
-    m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
+    if(!msg) {
+        spdlog::critical("Null message given!");
+
+        throw std::invalid_argument("Null message given!");
+    }
+
+    const auto size = msg->size();
+    const auto delay = PortDelays::baseIncomingDelay + (size / PortDelays::bytePerTick);
+
+    m_incoming.emplace_back(std::move(msg), delay);
 }
 
 void Port::pushOutgoing(UniqueMsg msg)
 {
-    m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
+    if(!msg) {
+        spdlog::critical("Null message given!");
+
+        throw std::invalid_argument("Null message given!");
+    }
+
+    const auto size = msg->size();
+    const auto delay = PortDelays::baseOutgoingDelay + (size / PortDelays::bytePerTick);
+
+    m_outgoing.emplace_back(std::move(msg), delay);
 }
 
 void Port::tick()
