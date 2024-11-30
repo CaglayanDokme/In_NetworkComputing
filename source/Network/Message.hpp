@@ -45,6 +45,8 @@ namespace Network::Messages {
         [[nodiscard]] e_Type type() const { return m_eType; }
         [[nodiscard]] const std::string &typeToString() const;
 
+        [[nodiscard]] virtual size_t size() const;
+
     public: /** Members **/
         const Address m_sourceID;
         const Address m_destinationID;
@@ -56,6 +58,13 @@ namespace Network::Messages {
         Acknowledge() = delete;
         explicit Acknowledge(const size_t sourceID, const size_t destinationID, const e_Type ackType);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Addressing **/
         const e_Type m_ackType;
     };
@@ -64,6 +73,13 @@ namespace Network::Messages {
     public: /** Construction **/
         DirectMessage() = delete;
         explicit DirectMessage(const size_t sourceID, const size_t destinationID);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
 
     public: /** Data **/
         std::vector<float> m_data;
@@ -86,6 +102,13 @@ namespace Network::Messages {
          */
         explicit BroadcastMessage(const size_t sourceID, const size_t destinationID);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         std::vector<float> m_data;
     };
@@ -106,6 +129,13 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          */
         explicit BarrierRequest(const size_t sourceID, const size_t destinationID);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
     };
 
     class BarrierRelease : public BaseMessage {
@@ -121,6 +151,13 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          */
         BarrierRelease(const size_t sourceID, const size_t destinationID);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
     };
 
     class Reduce : public BaseMessage {
@@ -144,6 +181,13 @@ namespace Network::Messages {
          * @param opType        Operation to perform
          */
         explicit Reduce(const size_t sourceID, const size_t destinationID, const OpType opType);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
 
     public: /** Data **/
         const OpType m_opType;
@@ -171,6 +215,13 @@ namespace Network::Messages {
          */
         explicit ReduceAll(const size_t sourceID, const size_t destinationID, const OpType opType);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         const OpType m_opType;
         std::vector<float> m_data;
@@ -193,6 +244,13 @@ namespace Network::Messages {
          */
         explicit Scatter(const size_t sourceID, const size_t destinationID);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         std::vector<float> m_data;
     };
@@ -214,6 +272,13 @@ namespace Network::Messages {
          */
         explicit Gather(const size_t sourceID, const size_t destinationID);
 
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
+
     public: /** Data **/
         std::vector<float> m_data;
     };
@@ -228,6 +293,13 @@ namespace Network::Messages {
          * @param destinationID ID of the destination computing node
          */
         explicit AllGather(const size_t sourceID, const size_t destinationID);
+
+    public: /** Methods **/
+        /**
+         * @brief Get the size of the message in bytes
+         * @return The size of the message in bytes
+         */
+        [[nodiscard]] size_t size() const final;
 
     public: /** Data **/
         std::vector<float> m_data;

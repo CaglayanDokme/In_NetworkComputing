@@ -1,5 +1,6 @@
 #include "Message.hpp"
 #include <map>
+#include <spdlog/spdlog.h>
 
 using namespace Network::Messages;
 
@@ -14,6 +15,17 @@ const std::string & BaseMessage::typeToString() const
     return toString(m_eType);
 }
 
+size_t BaseMessage::size() const
+{
+    size_t size = 0;
+
+    size += sizeof(m_eType);
+    size += (m_sourceID.has_value() ? sizeof(m_sourceID.value()) : 1);
+    size += (m_destinationID.has_value() ? sizeof(m_destinationID.value()) : 1);
+
+    return size;
+}
+
 Acknowledge::Acknowledge(const size_t sourceID, const size_t destinationID, const e_Type ackType)
 : BaseMessage(e_Type::Acknowledge, sourceID, destinationID), m_ackType(ackType)
 {
@@ -22,10 +34,24 @@ Acknowledge::Acknowledge(const size_t sourceID, const size_t destinationID, cons
     }
 }
 
+size_t Acknowledge::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_ackType);
+
+    return size;
+}
+
 DirectMessage::DirectMessage(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::DirectMessage, sourceID, destinationID), m_data()
 {
     // Nothing
+}
+
+size_t DirectMessage::size() const
+{
+    const auto payloadSize = m_data.size() * sizeof(m_data.front());
+
+    return (BaseMessage::size() + sizeof(m_data) + payloadSize);
 }
 
 BroadcastMessage::BroadcastMessage(const size_t sourceID)
@@ -38,6 +64,13 @@ BroadcastMessage::BroadcastMessage(const size_t sourceID, const size_t destinati
 : BaseMessage(e_Type::BroadcastMessage, sourceID, destinationID)
 {
     // Nothing
+}
+
+size_t BroadcastMessage::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
 }
 
 BarrierRequest::BarrierRequest()
@@ -58,6 +91,11 @@ BarrierRequest::BarrierRequest(const size_t sourceID, const size_t destinationID
     // Nothing
 }
 
+size_t BarrierRequest::size() const
+{
+    return BaseMessage::size();
+}
+
 BarrierRelease::BarrierRelease()
 : BaseMessage(e_Type::BarrierRelease)
 {
@@ -68,6 +106,11 @@ BarrierRelease::BarrierRelease(const size_t sourceID, const size_t destinationID
 : BaseMessage(e_Type::BarrierRelease, sourceID, destinationID)
 {
     // Nothing
+}
+
+size_t BarrierRelease::size() const
+{
+    return BaseMessage::size();
 }
 
 Reduce::Reduce(const size_t destinationID, const OpType opType)
@@ -82,6 +125,13 @@ Reduce::Reduce(const size_t sourceID, const size_t destinationID, const OpType o
     // Nothing
 }
 
+size_t Reduce::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_opType) + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
+}
+
 ReduceAll::ReduceAll(const OpType opType)
 : BaseMessage(e_Type::ReduceAll), m_opType(opType)
 {
@@ -92,6 +142,13 @@ ReduceAll::ReduceAll(const size_t sourceID, const size_t destinationID, const Op
 : BaseMessage(e_Type::ReduceAll, sourceID, destinationID), m_opType(opType)
 {
     // Nothing
+}
+
+size_t ReduceAll::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_opType) + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
 }
 
 Scatter::Scatter(const size_t sourceID)
@@ -106,6 +163,13 @@ Scatter::Scatter(const size_t sourceID, const size_t destinationID)
     // Nothing
 }
 
+size_t Scatter::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
+}
+
 Gather::Gather(const size_t destinationID)
 : BaseMessage(e_Type::Gather, std::nullopt, destinationID)
 {
@@ -118,6 +182,13 @@ Gather::Gather(const size_t sourceID, const size_t destinationID)
     // Nothing
 }
 
+size_t Gather::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
+}
+
 AllGather::AllGather()
 : BaseMessage(e_Type::AllGather)
 {
@@ -128,6 +199,13 @@ AllGather::AllGather(const size_t sourceID, const size_t destinationID)
 : BaseMessage(e_Type::AllGather, sourceID, destinationID)
 {
     // Nothing
+}
+
+size_t AllGather::size() const
+{
+    const auto size = BaseMessage::size() + sizeof(m_data) + (m_data.size() * sizeof(m_data.front()));
+
+    return size;
 }
 
 const std::string &Network::Messages::toString(const e_Type eType)
