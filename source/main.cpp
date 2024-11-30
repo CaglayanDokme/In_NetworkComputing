@@ -292,14 +292,54 @@ int main(const int argc, const char *const argv[])
         csvFile << "INC"
                 << ',' << "Ports"
                 << ',' << "CompNodes"
-                << ',' << "TotalTicks"
+                << ',' << "TimingCost"
+                << ',' << "BandwidthUsage_Msg"
+                << ',' << "BandwidthUsage_Byte"
                 << '\n';
     }
+
+    const auto bandwidthUsage_Msg = [&]() {
+        size_t totalUsage = 0;
+
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedMessages;
+        }
+
+        return totalUsage;
+    }();
+
+    const auto bandwidthUsage_Byte = [&]() {
+        size_t totalUsage = 0;
+
+        for(const auto &sw : coreSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        for(const auto &sw : aggSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        for(const auto &sw : edgeSwitches) {
+            totalUsage += sw.getStatistics().totalProcessedBytes;
+        }
+
+        return totalUsage;
+    }();
 
     csvFile << (bInNetworkComputing ? "1" : "0")
             << ',' << portPerSwitch
             << ',' << compNodeAmount
             << ',' << tick
+            << ',' << bandwidthUsage_Msg
+            << ',' << bandwidthUsage_Byte
             << '\n';
 
     return 0;
