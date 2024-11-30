@@ -5,6 +5,12 @@ import sys
 import os
 
 def plot_timing_cost(inc_enabled, traditional):
+    required_columns = ['CompNodes', 'TimingCost']
+    for col in required_columns:
+        if col not in inc_enabled.columns or col not in traditional.columns:
+            print(f"Missing required column: {col}")
+            return
+
     plt.figure(figsize=(14, 7))
     plt.plot(inc_enabled['CompNodes'], inc_enabled['TimingCost'], label='INC-enabled', marker='o')
     plt.plot(traditional['CompNodes'], traditional['TimingCost'], label='Traditional', marker='D')
@@ -24,6 +30,12 @@ def plot_timing_cost(inc_enabled, traditional):
     plt.close()
 
 def plot_bandwidth_usage_msg(inc_enabled, traditional):
+    required_columns = ['CompNodes', 'BandwidthUsage_Msg']
+    for col in required_columns:
+        if col not in inc_enabled.columns or col not in traditional.columns:
+            print(f"Missing required column: {col}")
+            return
+
     plt.figure(figsize=(14, 7))
     plt.plot(inc_enabled['CompNodes'], inc_enabled['BandwidthUsage_Msg'], label='INC-enabled', marker='o')
     plt.plot(traditional['CompNodes'], traditional['BandwidthUsage_Msg'], label='Traditional', marker='D')
@@ -43,6 +55,12 @@ def plot_bandwidth_usage_msg(inc_enabled, traditional):
     plt.close()
 
 def plot_bandwidth_usage_byte(inc_enabled, traditional):
+    required_columns = ['CompNodes', 'BandwidthUsage_Byte']
+    for col in required_columns:
+        if col not in inc_enabled.columns or col not in traditional.columns:
+            print(f"Missing required column: {col}")
+            return
+
     plt.figure(figsize=(14, 7))
     plt.plot(inc_enabled['CompNodes'], inc_enabled['BandwidthUsage_Byte'], label='INC-enabled', marker='o')
     plt.plot(traditional['CompNodes'], traditional['BandwidthUsage_Byte'], label='Traditional', marker='D')
@@ -62,6 +80,12 @@ def plot_bandwidth_usage_byte(inc_enabled, traditional):
     plt.close()
 
 def plot_compl_time_diff(inc_enabled, traditional):
+    required_columns = ['CompNodes', 'ComplTimeDiff']
+    for col in required_columns:
+        if col not in inc_enabled.columns or col not in traditional.columns:
+            print(f"Missing required column: {col}")
+            return
+
     plt.figure(figsize=(14, 7))
     plt.plot(inc_enabled['CompNodes'], inc_enabled['ComplTimeDiff'], label='INC-enabled', marker='o')
     plt.plot(traditional['CompNodes'], traditional['ComplTimeDiff'], label='Traditional', marker='D')
