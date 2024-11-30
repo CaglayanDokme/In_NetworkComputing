@@ -23,11 +23,23 @@ Port::st_Msg::st_Msg(UniqueMsg data, const size_t &delay)
 
 void Port::pushIncoming(UniqueMsg msg)
 {
+    if(!msg) {
+        spdlog::critical("Null message given!");
+
+        throw std::invalid_argument("Null message given!");
+    }
+
     m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
 }
 
 void Port::pushOutgoing(UniqueMsg msg)
 {
+    if(!msg) {
+        spdlog::critical("Null message given!");
+
+        throw std::invalid_argument("Null message given!");
+    }
+
     m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
 }
 
