@@ -26,6 +26,16 @@ cmake -DSPDLOG_BUILD_SHARED=ON -DSPDLOG_ENABLE_PCH=ON -DSPDLOG_BUILD_EXAMPLE=OFF
 make -j all && sudo make install
 ```
 
+#### Plotting the Results
+You can also plot the results of the simulation using the script(s) provided in the `scripts` directory. The script is written in Python and uses the various packages for plotting. You can install its dependencies using the following command.
+
+```Bash
+sudo apt install python3 &&
+sudo apt install python3-pip &&
+pip install pandas &&
+pip install matplotlib
+```
+
 ### Implementing Custom Parallel Applications
 The program is designed to ease migrations from traditional MPI-based programs. So, the programming interface is quite similar to that.
 Just like you were writing a program using the MPI library, you need to write a program in the [`Computer::task(..)`](source/Computer.cpp) function.
