@@ -6,9 +6,8 @@
 using namespace Network;
 
 namespace PortDelays {
-    static constexpr size_t incomingMsg = 5;
-    static constexpr size_t outgoingMsg = 3;
-}
+    static constexpr size_t bytePerTick = 100;
+};
 
 bool Port::operator==(const Port &port) const
 {
@@ -29,7 +28,10 @@ void Port::pushIncoming(UniqueMsg msg)
         throw std::invalid_argument("Null message given!");
     }
 
-    m_incoming.emplace_back(std::move(msg), PortDelays::incomingMsg);
+    const auto size = msg->size();
+    const auto delay = size / PortDelays::bytePerTick;
+
+    m_incoming.emplace_back(std::move(msg), delay);
 }
 
 void Port::pushOutgoing(UniqueMsg msg)
@@ -40,7 +42,10 @@ void Port::pushOutgoing(UniqueMsg msg)
         throw std::invalid_argument("Null message given!");
     }
 
-    m_outgoing.emplace_back(std::move(msg), PortDelays::outgoingMsg);
+    const auto size = msg->size();
+    const auto delay = size / PortDelays::bytePerTick;
+
+    m_outgoing.emplace_back(std::move(msg), delay);
 }
 
 void Port::tick()
