@@ -1,7 +1,6 @@
 #include "Computer.hpp"
 #include "spdlog/spdlog.h"
 #include "Network/Message.hpp"
-#include <fmt/core.h>
 
 Computer::Computer()
 : m_ID(nextID++), m_mpi(m_ID)
