@@ -447,58 +447,6 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                 send(std::move(msg));
             }
         }
-
-        // Wait for acknowledgements
-        {
-            std::unique_lock lock(m_acknowledge.mutex);
-
-            std::vector<bool> acks(compNodeAmount, false);
-            acks.at(m_ID) = true; // Skip the broadcaster
-
-            {
-                std::erase_if(m_acknowledge.messages, [&](auto &&msg) {
-                    if(Messages::e_Type::BroadcastMessage != msg->m_ackType) {
-                        return false;
-                    }
-
-                    if(acks.at(msg->m_sourceID.value())) {
-                        spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
-
-                        throw std::logic_error("MPI: Duplicate acknowledgement!");
-                    }
-
-                    spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg->m_sourceID.value());
-                    acks.at(msg->m_sourceID.value()) = true;
-
-                    return true;
-                });
-            }
-
-            while(!std::all_of(acks.cbegin(), acks.cend(), [](const bool ack) { return ack; })) {
-                spdlog::trace("MPI({}): Waiting for broadcast acknowledgements..", m_ID);
-                m_acknowledge.notifier.wait(lock, [&]() { return !m_acknowledge.messages.empty(); });
-
-                const auto &msg = *m_acknowledge.messages.back();
-
-                if(Messages::e_Type::BroadcastMessage != msg.m_ackType) {
-                    spdlog::warn("MPI({}): While waiting for broadcast acknowledge, received acknowledgement of another type({})!", m_ID, msg.typeToString());
-
-                    continue;
-                }
-
-                if(acks.at(msg.m_sourceID.value())) {
-                    spdlog::critical("MPI({}): Received duplicate acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
-
-                    throw std::logic_error("MPI: Duplicate acknowledgement!");
-                }
-
-                spdlog::trace("MPI({}): Received acknowledgement from node #{}", m_ID, msg.m_sourceID.value());
-                acks.at(msg.m_sourceID.value()) = true;
-                m_acknowledge.messages.pop_back();
-            }
-
-            spdlog::trace("MPI({}): Received all acknowledgements", m_ID);
-        }
     }
     else {
         if(!data.empty()) {
@@ -549,14 +497,6 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
             m_broadcastReceive.messages.pop_back();
 
             break;
-        }
-
-        // Send an acknowledgement
-        {
-            auto msg = std::make_unique<Messages::Acknowledge>(m_ID, sourceID, Messages::e_Type::BroadcastMessage);
-            send(std::move(msg));
-
-            spdlog::trace("MPI({}): Sent broadcast acknowledgement to {}", m_ID, sourceID);
         }
     }
 
@@ -948,61 +888,28 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
         if(Network::Switches::isNetworkComputingEnabled()) {
             std::unique_lock lock(m_reduce.mutex);
 
-            do {
-                // Check the already queued messages
-                {
-                    auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
-                        if(msg->m_opType != operation) {
-                            return false;
-                        }
+            bool bAlreadyReceived = false;
 
-                        if(msg->m_data.size() != data.size()) {
-                            spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
-
-                            return false;
-                        }
-
-                        return true;
-                    });
-
-                    if(msgIterator != m_reduce.messages.cend()) {
-                        spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
-
-                        auto &msg = *msgIterator->get();
-
-                        std::transform( data.cbegin(),
-                                        data.cend(),
-                                        msg.m_data.cbegin(),
-                                        data.begin(),
-                                        [operation](const float &lhs, const float &rhs) {
-                                            return Messages::reduce(lhs, rhs, operation);
-                                        });
-
-                        m_reduce.messages.erase(msgIterator);
-
-                        break;
-                    }
-                }
-
-                // Wait for the message
-                while(true) {
-                    m_reduce.notifier.wait(lock);
-
-                    auto &msg = *m_reduce.messages.back();
-
-                    if(msg.m_opType != operation) {
-                        spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
-
-                        continue;
+            // Check the already queued messages
+            {
+                auto msgIterator = std::find_if(m_reduce.messages.begin(), m_reduce.messages.end(), [&](auto &&msg) {
+                    if(msg->m_opType != operation) {
+                        return false;
                     }
 
-                    if(msg.m_data.size() != data.size()) {
-                        spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
+                    if(msg->m_data.size() != data.size()) {
+                        spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg->m_data.size(), data.size());
 
-                        continue;
+                        return false;
                     }
 
+                    return true;
+                });
+
+                if(msgIterator != m_reduce.messages.cend()) {
                     spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+                    auto &msg = *msgIterator->get();
 
                     std::transform( data.cbegin(),
                                     data.cend(),
@@ -1012,11 +919,44 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
                                         return Messages::reduce(lhs, rhs, operation);
                                     });
 
-                    m_reduce.messages.pop_back();
+                    m_reduce.messages.erase(msgIterator);
 
-                    break;
+                    bAlreadyReceived = true;
                 }
-            } while(false);
+            }
+
+            // Wait for the message
+            while(!bAlreadyReceived) {
+                m_reduce.notifier.wait(lock);
+
+                auto &msg = *m_reduce.messages.back();
+
+                if(msg.m_opType != operation) {
+                    spdlog::warn("MPI({}): Received data with invalid operation({})! Expected {}", m_ID, Messages::toString(msg.m_opType), Messages::toString(operation));
+
+                    continue;
+                }
+
+                if(msg.m_data.size() != data.size()) {
+                    spdlog::warn("MPI({}): Received data size({}) doesn't match the expected size({})!", m_ID, msg.m_data.size(), data.size());
+
+                    continue;
+                }
+
+                spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
+
+                std::transform( data.cbegin(),
+                                data.cend(),
+                                msg.m_data.cbegin(),
+                                data.begin(),
+                                [operation](const float &lhs, const float &rhs) {
+                                    return Messages::reduce(lhs, rhs, operation);
+                                });
+
+                m_reduce.messages.pop_back();
+
+                break;
+            }
         }
         else {
             std::unique_lock lock(m_reduce.mutex);

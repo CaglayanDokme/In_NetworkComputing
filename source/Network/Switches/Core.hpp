@@ -33,8 +33,8 @@ namespace Network::Switches {
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BroadcastMessage> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRequest> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::BarrierRelease> msg);
-        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::Reduce> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceAll> msg);
+        void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Reduce> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Scatter> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::Gather> msg);
         void process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSwitch::AllGather> msg);
@@ -49,14 +49,6 @@ namespace Network::Switches {
     private: /** Members **/
         size_t m_nextPort{0};
         std::map<size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False
-
-        struct {
-            std::map<size_t, bool> flags;        // Key: Port index, Value: True/False
-            size_t destinationID;                // ID of the destined computing node (i.e. root process of reduce operation)
-            size_t destinationPortID;            // Port index of the destined computing node
-            Messages::Reduce::OpType opType;          // Current operation type
-            decltype(Messages::Reduce::m_data) value; // Current reduction value (e.g. Sum of received values, maximum of received values)
-        } m_reduceStates;
 
         struct {
             bool bOngoing{false};                        // True if a reduce-all operation is ongoing

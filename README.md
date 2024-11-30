@@ -17,8 +17,24 @@ There are a couple of reasons behind this concept.
 Writing and building a custom parallel application within the simulator is described in this section. For now, it only supports Linux.
 
 ### Dependencies
-The only external dependency of the program is [spdlog v1.9.2](https://github.com/gabime/spdlog) library which is used for logging events in the program.
-You can directly install it from APT repositories. Just run `sudo apt install libspdlog1`.
+The only external dependency of the program is [spdlog v1.15.0](https://github.com/gabime/spdlog/tree/v1.15.0) library which is used for logging events in the program.
+
+```Bash
+git clone --branch v1.15.0 https://github.com/gabime/spdlog.git &&
+mkdir -p spdlog/build && cd spdlog/build &&
+cmake -DSPDLOG_BUILD_SHARED=ON -DSPDLOG_ENABLE_PCH=ON -DSPDLOG_BUILD_EXAMPLE=OFF -DSPDLOG_INSTALL=ON -DSPDLOG_USE_STD_FORMAT=OFF .. &&
+make -j all && sudo make install
+```
+
+#### Plotting the Results
+You can also plot the results of the simulation using the script(s) provided in the `scripts` directory. The script is written in Python and uses the various packages for plotting. You can install its dependencies using the following command.
+
+```Bash
+sudo apt install python3 &&
+sudo apt install python3-pip &&
+pip install pandas &&
+pip install matplotlib
+```
 
 ### Implementing Custom Parallel Applications
 The program is designed to ease migrations from traditional MPI-based programs. So, the programming interface is quite similar to that.
