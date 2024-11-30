@@ -297,7 +297,7 @@ int main(const int argc, const char *const argv[])
                 << ',' << "TimingCost"
                 << ',' << "BandwidthUsage_Msg"
                 << ',' << "BandwidthUsage_Byte"
-                << ',' << "TimeDiff"
+                << ',' << "ComplTimeDiff"
 
                 << '\n';
     }
@@ -339,7 +339,7 @@ int main(const int argc, const char *const argv[])
     }();
 
 
-    const auto timeDiff = [&]() {
+    const auto complTimeDiff = [&]() {
         size_t maxReleaseTime = 0;
         size_t minReleaseTime = std::numeric_limits<size_t>::max();
 
@@ -359,7 +359,7 @@ int main(const int argc, const char *const argv[])
             << ',' << tick
             << ',' << bandwidthUsage_Msg
             << ',' << bandwidthUsage_Byte
-            << ',' << timeDiff
+            << ',' << complTimeDiff
 
             << '\n';
 
