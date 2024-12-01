@@ -9,6 +9,7 @@ namespace Network::Switches {
     class Aggregate : public ISwitch {
     public: /** Construction **/
         Aggregate() = delete;
+        ~Aggregate();
         explicit  Aggregate(const size_t portAmount);
 
         // Forbid copying
@@ -20,7 +21,25 @@ namespace Network::Switches {
         Aggregate &operator=(Aggregate &&) = delete;
 
     public: /** Methods **/
-        [[nodiscard]] bool tick() final;
+        /**
+         * @brief Advance the aggregate switches by one tick
+         */
+        static void tick();
+
+        /**
+         * @brief Stop all the aggregate switch
+         */
+        static void stop();
+
+        /**
+         * @brief Check if the last tick has been processed by all aggregate switches
+         */
+        [[nodiscard]] static bool isTickProcessedByAll();
+
+        /**
+         * @brief Blocked wait until the last tick has been processed by all aggregate switches
+         */
+        static void waitTickCompletion();
 
         /**
          * @brief  Get reference to a specific up-port of this switch
@@ -41,6 +60,8 @@ namespace Network::Switches {
         [[nodiscard]] Port &getDownPort(const size_t &portID);
 
     private:
+        void processorTask() final;
+
         /**
          * @brief Process a message received from a port
          * @param sourcePortIdx Index of the source port
@@ -80,7 +101,6 @@ namespace Network::Switches {
     private: /** Members **/
         const size_t assocCompNodeAmount;
         const size_t firstCompNodeIdx;
-        size_t m_nextPort{0};
         std::map<size_t, Port&> m_downPortTable; // Re-direction table for down-ports
         size_t m_subColumnIdx;                   // Index of the sub-column this aggregate switch belongs to (i.e. index of the column in group)
         size_t m_sameColumnPortID;               // ID of the same-column down-port
@@ -124,5 +144,17 @@ namespace Network::Switches {
         } m_allGatherStates;
 
         inline static size_t nextID = 0; // i.e. Number of aggregate switches in total
+
+        inline static bool bStopRequested{false};
+
+        inline static size_t tickCounter = 0;
+
+        inline static std::mutex tickUpdateMutex;
+        inline static std::condition_variable tickUpdateNotifier;
+        inline static bool bTickUpdateOccurred{false};
+
+        inline static size_t tickProcessCounter = 0;
+        inline static std::mutex tickCompletedMutex;
+        inline static std::condition_variable tickCompletedNotifier;
     };
 }

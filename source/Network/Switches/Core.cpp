@@ -27,87 +27,193 @@ Core::Core(const size_t portAmount)
     for(size_t sourcePortIdx = 0; sourcePortIdx < m_portAmount; ++sourcePortIdx){
         m_allGatherStates.flags.insert({sourcePortIdx, false});
     }
+
+    m_processorTask = std::thread(&Core::processorTask, this);
 }
 
-bool Core::tick()
+Core::~Core()
 {
-    // Advance all ports
-    for(auto &port : m_ports) {
-        port.tick();
+    if(m_processorTask.joinable()) {
+        m_processorTask.join();
+    }
+}
+
+void Core::tick()
+{
+    if(bStopRequested) {
+        spdlog::critical("Core Switch: Tick advance requested after stopping!");
+
+        throw "Tick advance requested after stopping!";
     }
 
-    // Check all ports for incoming messages
-    bool bMsgReceived = false;
-    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
-        const auto sourcePortIdx = m_nextPort;
-        auto &sourcePort = m_ports.at(sourcePortIdx);
+    {
+        std::lock_guard<std::mutex> lock(tickUpdateMutex);
 
-        if(!sourcePort.hasIncoming()) {
-            continue;
+        if(bTickUpdateOccurred) {
+            spdlog::critical("Edge Switch: Tick advance requested before the previous tick has been processed!");
+
+            throw "Tick advance requested before the previous tick has been processed!";
         }
 
-        auto anyMsg = sourcePort.popIncoming();
+        ++tickCounter;
+        bTickUpdateOccurred = true;
+        tickProcessCounter = 0;
+    }
 
-        bMsgReceived = true;
-        ++m_statistics.totalProcessedMessages;
-        m_statistics.totalProcessedBytes += anyMsg->size();
+    tickUpdateNotifier.notify_all();
+}
 
-        spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+void Core::stop()
+{
+    bStopRequested = true;
+    tickUpdateNotifier.notify_all();
+}
 
-        // Is network computing enabled?
-        if(!canCompute()) {
-            redirect(sourcePortIdx, std::move(anyMsg));
+bool Core::isTickProcessedByAll()
+{
+    return (tickProcessCounter == nextID);
+}
 
-            continue;
+void Core::waitTickCompletion()
+{
+    std::unique_lock<std::mutex> lock(tickCompletedMutex);
+
+    tickCompletedNotifier.wait(lock, [] { return isTickProcessedByAll(); });
+}
+
+void Core::processorTask()
+{
+    m_bRunning = true;
+    spdlog::debug("Core Switch({}): Processor task has been started!", m_ID);
+
+    size_t nextPort{0}; // Index of the next port to be checked for an incoming message
+
+    size_t lastProcessedTick = 0;
+    while(!bStopRequested) {
+        {
+            std::unique_lock<std::mutex> lock(tickUpdateMutex);
+
+            if(!bTickUpdateOccurred) {
+                tickUpdateNotifier.wait(lock, [&] { return (bTickUpdateOccurred || bStopRequested); });
+            }
+            else if((lastProcessedTick == tickCounter) && !isTickProcessedByAll()) {
+                tickUpdateNotifier.wait(lock);
+
+                // continue; // This tick has already been processed, wait for others to process as well
+            }
+            else {
+                spdlog::trace("Edge Switch({}): No need to wait for tick notification");
+            }
         }
 
-        switch(anyMsg->type()) {
-            case Messages::e_Type::DirectMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::Acknowledge: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::BroadcastMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::BarrierRequest: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::ReduceAll: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Gather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_AllGather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
-                break;
-            }
-            default: {
-                spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
-                spdlog::debug("Type name was {}", anyMsg->typeToString());
+        if(bStopRequested) {
+            spdlog::debug("Aggregate Switch({}): Stop requested for processor task!", m_ID);
 
-                return false;
+            break;
+        }
+
+        if(lastProcessedTick == tickCounter) {
+            throw std::runtime_error("Tick counter has not been advanced!");
+        }
+
+        // Advance all ports
+        for(auto &port : m_ports) {
+            port.tick();
+        }
+
+        // Check all ports for incoming messages
+        bool bMsgReceived = false;
+        for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, nextPort = (nextPort + 1) % m_portAmount) {
+            const auto sourcePortIdx = nextPort;
+            auto &sourcePort = m_ports.at(sourcePortIdx);
+
+            if(!sourcePort.hasIncoming()) {
+                continue;
+            }
+
+            auto anyMsg = sourcePort.popIncoming();
+
+            bMsgReceived = true;
+            ++m_statistics.totalProcessedMessages;
+            m_statistics.totalProcessedBytes += anyMsg->size();
+
+            spdlog::trace("Core Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+            // Is network computing enabled?
+            if(!canCompute()) {
+                redirect(sourcePortIdx, std::move(anyMsg));
+
+                break;
+            }
+
+            switch(anyMsg->type()) {
+                case Messages::e_Type::DirectMessage: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::Acknowledge: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::BroadcastMessage: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::BarrierRequest: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::ReduceAll: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Reduce: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Scatter: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Gather: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_AllGather: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
+                    break;
+                }
+                default: {
+                    spdlog::error("Core Switch({}): Cannot determine the type of received message!", m_ID);
+                    spdlog::debug("Type name was {}", anyMsg->typeToString());
+
+                    throw std::runtime_error("Unknown message type!");
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(tickUpdateMutex);
+
+            lastProcessedTick = tickCounter;
+
+            if(++tickProcessCounter; isTickProcessedByAll()) {
+                std::lock_guard<std::mutex> lock(tickCompletedMutex);
+
+                tickCompletedNotifier.notify_one();
+                bTickUpdateOccurred = false;
             }
         }
     }
 
-    return true;
+    if(!bStopRequested) {
+        spdlog::error("Core Switch({}): Processor task has been stopped without being requested!", m_ID);
+
+        throw std::runtime_error("Processor task has been stopped without being requested!");
+    }
+
+    spdlog::debug("Core Switch({}): Processor task has been stopped!", m_ID);
+    m_bRunning = false;
 }
 
 void Core::process(const size_t sourcePortIdx, std::unique_ptr<Messages::DirectMessage> msg)

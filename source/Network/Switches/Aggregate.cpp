@@ -60,7 +60,7 @@ Aggregate::Aggregate(const size_t portAmount)
             }
 
             if(m_reduceAllStates.toUp.receiveFlags.size() != getDownPortAmount()) {
-                spdlog::critical("Edge Switch({}): Amount of up-port reduce-all requests is not equal to down-port amount!", m_ID);
+                spdlog::critical("Aggregate Switch({}): Amount of up-port reduce-all requests is not equal to down-port amount!", m_ID);
 
                 throw std::runtime_error("Invalid mapping!");
             }
@@ -74,7 +74,7 @@ Aggregate::Aggregate(const size_t portAmount)
             }
 
             if(m_reduceAllStates.toDown.receiveFlags.size() != getUpPortAmount()) {
-                spdlog::critical("Edge Switch({}): Amount of down-port reduce-all requests is not equal to up-port amount!", m_ID);
+                spdlog::critical("Aggregate Switch({}): Amount of down-port reduce-all requests is not equal to up-port amount!", m_ID);
 
                 throw std::runtime_error("Invalid mapping!");
             }
@@ -91,7 +91,7 @@ Aggregate::Aggregate(const size_t portAmount)
             }
 
             if(m_allGatherStates.toUp.receiveFlags.size() != getDownPortAmount()) {
-                spdlog::critical("Edge Switch({}): Amount of up-port all-gather requests is not equal to down-port amount!", m_ID);
+                spdlog::critical("Aggregate Switch({}): Amount of up-port all-gather requests is not equal to down-port amount!", m_ID);
                 spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getUpPortAmount(), m_allGatherStates.toUp.receiveFlags.size());
 
                 throw std::runtime_error("Invalid mapping!");
@@ -106,99 +106,204 @@ Aggregate::Aggregate(const size_t portAmount)
             }
 
             if(m_allGatherStates.toDown.receiveFlags.size() != getUpPortAmount()) {
-                spdlog::critical("Edge Switch({}): Amount of down-port all-gather requests is not equal to up-port amount!", m_ID);
+                spdlog::critical("Aggregate Switch({}): Amount of down-port all-gather requests is not equal to up-port amount!", m_ID);
                 spdlog::debug("Aggregate Switch({}): Expected {}, got {}", m_ID, getDownPortAmount(), m_allGatherStates.toDown.receiveFlags.size());
 
                 throw std::runtime_error("Invalid mapping!");
             }
         }
     }
+
+    m_processorTask = std::thread(&Aggregate::processorTask, this);
 }
 
-bool Aggregate::tick()
+Aggregate::~Aggregate()
 {
-    // Advance all ports
-    for(auto &port : m_ports) {
-        port.tick();
+    if(m_processorTask.joinable()) {
+        m_processorTask.join();
+    }
+}
+
+void Aggregate::tick()
+{
+    if(bStopRequested) {
+        spdlog::critical("Aggregate Switch: Tick advance requested after stopping!");
+
+        throw "Tick advance requested after stopping!";
     }
 
-    // Check all ports for incoming messages
-    // TODO Should we process one message for each port at every tick?
-    bool bMsgReceived = false;
-    for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
-        const auto sourcePortIdx = m_nextPort;
-        auto &sourcePort = m_ports.at(sourcePortIdx);
+    {
+        std::lock_guard<std::mutex> lock(tickUpdateMutex);
 
-        if(!sourcePort.hasIncoming()) {
-            continue;
+        if(bTickUpdateOccurred) {
+            spdlog::critical("Edge Switch: Tick advance requested before the previous tick has been processed!");
+
+            throw "Tick advance requested before the previous tick has been processed!";
         }
 
-        auto anyMsg = sourcePort.popIncoming();
+        ++tickCounter;
+        bTickUpdateOccurred = true;
+        tickProcessCounter = 0;
+    }
 
-        bMsgReceived = true;
-        ++m_statistics.totalProcessedMessages;
-        m_statistics.totalProcessedBytes += anyMsg->size();
+    tickUpdateNotifier.notify_all();
+}
 
-        spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+void Aggregate::stop()
+{
+    bStopRequested = true;
+    tickUpdateNotifier.notify_all();
+}
 
-        // Is network computing enabled?
-        if(!canCompute()) {
-            redirect(sourcePortIdx, std::move(anyMsg));
+bool Aggregate::isTickProcessedByAll()
+{
+    return (tickProcessCounter == nextID);
+}
 
-            continue;
+void Aggregate::waitTickCompletion()
+{
+    std::unique_lock<std::mutex> lock(tickCompletedMutex);
+
+    tickCompletedNotifier.wait(lock, [] { return isTickProcessedByAll(); });
+}
+
+void Aggregate::processorTask()
+{
+    m_bRunning = true;
+    spdlog::debug("Aggregate Switch({}): Processor task has been started!", m_ID);
+
+    size_t nextPort{0}; // Index of the next port to be checked for an incoming message
+
+    size_t lastProcessedTick = 0;
+    while(!bStopRequested) {
+        {
+            std::unique_lock<std::mutex> lock(tickUpdateMutex);
+
+            if(!bTickUpdateOccurred) {
+                tickUpdateNotifier.wait(lock, [&] { return (bTickUpdateOccurred || bStopRequested); });
+            }
+            else if((lastProcessedTick == tickCounter) && !isTickProcessedByAll()) {
+                tickUpdateNotifier.wait(lock);
+
+                // continue; // This tick has already been processed, wait for others to process as well
+            }
+            else {
+                spdlog::trace("Edge Switch({}): No need to wait for tick notification");
+            }
         }
 
-        switch(anyMsg->type()) {
-            case Messages::e_Type::DirectMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::Acknowledge: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::BroadcastMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::BarrierRequest: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::BarrierRelease: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::ReduceAll: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_Gather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
-                break;
-            }
-            case Messages::e_Type::IS_AllGather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
-                break;
-            }
-            default: {
-                spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
-                spdlog::debug("Type name was {}", anyMsg->typeToString());
+        if(bStopRequested) {
+            spdlog::debug("Aggregate Switch({}): Stop requested for processor task!", m_ID);
 
-                return false;
+            break;
+        }
+
+        if(lastProcessedTick == tickCounter) {
+            throw std::runtime_error("Tick counter has not been advanced!");
+        }
+
+        // Advance all ports
+        for(auto &port : m_ports) {
+            port.tick();
+        }
+
+        // Check all ports for incoming messages
+        bool bMsgReceived = false;
+        for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, nextPort = (nextPort + 1) % m_portAmount) {
+            const auto sourcePortIdx = nextPort;
+            auto &sourcePort = m_ports.at(sourcePortIdx);
+
+            if(!sourcePort.hasIncoming()) {
+                continue;
+            }
+
+            auto anyMsg = sourcePort.popIncoming();
+
+            bMsgReceived = true;
+            ++m_statistics.totalProcessedMessages;
+            m_statistics.totalProcessedBytes += anyMsg->size();
+
+            spdlog::trace("Aggregate Switch({}): Received {} from sourcePort #{}.", m_ID, anyMsg->typeToString(), sourcePortIdx);
+
+            // Is network computing enabled?
+            if(!canCompute()) {
+                redirect(sourcePortIdx, std::move(anyMsg));
+
+                break;
+            }
+
+            switch(anyMsg->type()) {
+                case Messages::e_Type::DirectMessage: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::Acknowledge: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::BroadcastMessage: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::BarrierRequest: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::BarrierRelease: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::ReduceAll: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Reduce: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Scatter: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_Gather: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                    break;
+                }
+                case Messages::e_Type::IS_AllGather: {
+                    process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
+                    break;
+                }
+                default: {
+                    spdlog::error("Aggregate Switch({}): Cannot determine the type of received message!", m_ID);
+                    spdlog::debug("Type name was {}", anyMsg->typeToString());
+
+                    throw std::runtime_error("Unknown message type!");
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(tickUpdateMutex);
+
+            lastProcessedTick = tickCounter;
+
+            if(++tickProcessCounter; isTickProcessedByAll()) {
+                std::lock_guard<std::mutex> lock(tickCompletedMutex);
+
+                tickCompletedNotifier.notify_one();
+                bTickUpdateOccurred = false;
             }
         }
     }
 
-    return true;
+    if(!bStopRequested) {
+        spdlog::error("Aggregate Switch({}): Processor task has been stopped without being requested!", m_ID);
+
+        throw std::runtime_error("Processor task has been stopped without being requested!");
+    }
+
+    spdlog::debug("Aggregate Switch({}): Processor task has been stopped!", m_ID);
+    m_bRunning = false;
 }
 
 Network::Port &Aggregate::getUpPort(const size_t &portID)
@@ -303,9 +408,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Ba
         const auto downPortIdx = sourcePortIdx - getUpPortAmount();
 
         if(m_barrierRequestFlags.at(downPortIdx)) {
-            spdlog::critical("Core Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
+            spdlog::critical("Aggregate Switch({}): Port #{} already sent a barrier request!", m_ID, sourcePortIdx);
 
-            throw std::runtime_error("Core Switch: Port already sent a barrier request!");
+            throw std::runtime_error("Aggregate Switch: Port already sent a barrier request!");
         }
         else {
             m_barrierRequestFlags.at(downPortIdx) = true;
@@ -363,7 +468,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
 
         // Check if to-down has an ongoing reduce-all operation
         if(m_reduceAllStates.toDown.bOngoing) {
-            spdlog::critical("Edge Switch({}): Ongoing reduce-all operation to down-ports!", m_ID);
+            spdlog::critical("Aggregate Switch({}): Ongoing reduce-all operation to down-ports!", m_ID);
 
             throw std::runtime_error("Edge Switch: Ongoing reduce-all operation to down-ports!");
         }
@@ -371,14 +476,14 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
         if(state.bOngoing) {
             // Check if the source port has already sent a reduce-all message
             if(state.receiveFlags.at(sourcePortIdx)) {
-                spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
+                spdlog::critical("Aggregate Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
 
                 throw std::runtime_error("Edge Switch: This port has already sent a reduce-all message!");
             }
 
             // Check if the operation type is the same
             if(state.opType != msg->m_opType) {
-                spdlog::critical("Edge Switch({}): Wrong reduce-all operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg->m_opType));
+                spdlog::critical("Aggregate Switch({}): Wrong reduce-all operation type from port #{}! Expected {}, got {}", m_ID, sourcePortIdx, Messages::toString(state.opType), Messages::toString(msg->m_opType));
 
                 throw std::runtime_error("Edge Switch: The operation type is different!");
             }
@@ -424,20 +529,20 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
 
         // Check if to-up has an ongoing reduce-all operation
         if(m_reduceAllStates.toUp.bOngoing) {
-            spdlog::critical("Edge Switch({}): Ongoing reduce-all operation to up-ports!", m_ID);
+            spdlog::critical("Aggregate Switch({}): Ongoing reduce-all operation to up-ports!", m_ID);
 
             throw std::runtime_error("Edge Switch: Ongoing reduce-all operation to up-ports!");
         }
 
         if(!state.bOngoing) {
-            spdlog::critical("Edge Switch({}): Reduce-all to-down wasn't initiated!", m_ID);
+            spdlog::critical("Aggregate Switch({}): Reduce-all to-down wasn't initiated!", m_ID);
 
             throw std::runtime_error("Edge Switch: Reduce-all to-down wasn't initiated!");
         }
 
         // Check if the source port has already sent a reduce-all message
         if(state.receiveFlags.at(sourcePortIdx)) {
-            spdlog::critical("Edge Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
+            spdlog::critical("Aggregate Switch({}): This port({}) has already sent a reduce-all message!", m_ID, sourcePortIdx);
 
             throw std::runtime_error("Edge Switch: This port has already sent a reduce-all message!");
         }
@@ -451,14 +556,14 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
         else {
             // Check if the operation type is the same
             if(state.opType != msg->m_opType) {
-                spdlog::critical("Edge Switch({}): In reduce-all message, the operation type is different!", m_ID);
+                spdlog::critical("Aggregate Switch({}): In reduce-all message, the operation type is different!", m_ID);
 
                 throw std::runtime_error("Edge Switch: The operation type is different!");
             }
 
             // Check if the data is the same
             if(state.value != msg->m_data) {
-                spdlog::critical("Edge Switch({}): In reduce-all message, the data is different!", m_ID);
+                spdlog::critical("Aggregate Switch({}): In reduce-all message, the data is different!", m_ID);
 
                 throw std::runtime_error("Edge Switch: The data is different!");
             }
@@ -781,7 +886,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
             if(m_gatherState.value.size() == (sameSubColumnEdgeSwAmount * getDownPortAmount())) {
                 spdlog::trace("Aggregate Switch({}): Sending the gathered data down to the same column edge switch..", m_ID);
 
-                // Send the gatherd data to the destination computing node's edge switch
+                // Send the gathered data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(m_gatherState.destinationID);
 
                 txMsg->m_data = std::move(m_gatherState.value);
@@ -792,7 +897,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         else {
             // If the aggregate switch is placed in a different column in the same group, it will receive from both up-ports and down-port connected to the same column edge switch
             if(m_gatherState.value.size() == ((sameSubColumnEdgeSwAmount * getDownPortAmount()) + getDownPortAmount())) {
-                spdlog::trace("Aggregate Switch({}): Sending the gatherd data down to a different column edge switch..", m_ID);
+                spdlog::trace("Aggregate Switch({}): Sending the gathered data down to a different column edge switch..", m_ID);
 
                 // Send the gathered data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Gather>(m_gatherState.destinationID);

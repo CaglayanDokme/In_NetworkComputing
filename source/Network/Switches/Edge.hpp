@@ -9,6 +9,7 @@ namespace Network::Switches {
     class Edge : public ISwitch {
     public: /** Construction **/
         Edge() = delete;
+        ~Edge();
         explicit  Edge(const size_t portAmount);
 
         // Forbid copying
@@ -20,7 +21,25 @@ namespace Network::Switches {
         Edge &operator=(Edge &&) = delete;
 
     public: /** Methods **/
-        [[nodiscard]] bool tick() final;
+        /**
+         * @brief Advance the edge switches by one tick
+         */
+        static void tick();
+
+        /**
+         * @brief Stop all the edge switch
+         */
+        static void stop();
+
+        /**
+         * @brief Check if the last tick has been processed by all edge switches
+         */
+        [[nodiscard]] static bool isTickProcessedByAll();
+
+        /**
+         * @brief Blocked wait until the last tick has been processed by all aggregate switches
+         */
+        static void waitTickCompletion();
 
         /**
          * @brief  Get reference to a specific up-port of this switch
@@ -41,6 +60,8 @@ namespace Network::Switches {
         [[nodiscard]] Port &getDownPort(const size_t &portID);
 
     private:
+        void processorTask() final;
+
         /**
          * @brief Process a message received from a port
          * @param sourcePortIdx Index of the source port
@@ -90,7 +111,6 @@ namespace Network::Switches {
 
     private: /** Members **/
         const size_t firstCompNodeIdx;                 // Index of the first computing node connected to this switch
-        size_t m_nextPort{0};                          // Index of the next port to be checked for an incoming message
         std::map<size_t, Port&> m_downPortTable;       // Re-direction table for down-ports
         std::map<size_t, bool> m_barrierRequestFlags;  // Key: Down-port index, Value: True/False
         std::map<size_t, bool> m_barrierReleaseFlags;  // Key: Up-port index, Value: True/False
@@ -149,5 +169,17 @@ namespace Network::Switches {
         } m_allGatherStates;
 
         inline static size_t nextID = 0; // i.e. Number of edge switches in total
+
+        inline static bool bStopRequested{false};
+
+        inline static size_t tickCounter = 0;
+
+        inline static std::mutex tickUpdateMutex;
+        inline static std::condition_variable tickUpdateNotifier;
+        inline static bool bTickUpdateOccurred{false};
+
+        inline static size_t tickProcessCounter = 0;
+        inline static std::mutex tickCompletedMutex;
+        inline static std::condition_variable tickCompletedNotifier;
     };
 }

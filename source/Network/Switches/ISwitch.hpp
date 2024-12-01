@@ -1,7 +1,11 @@
 #pragma once
 
 #include "Network/Port.hpp"
+#include <mutex>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
 
 namespace Network::Switches {
     /**
@@ -43,10 +47,14 @@ namespace Network::Switches {
 
         // Must be move-able to store in containers
         ISwitch(ISwitch &&) = default;
-        ISwitch &operator=(ISwitch &&) = delete;
+        ISwitch &operator=(ISwitch &&) = default;
 
     public: /** Methods **/
-        [[nodiscard]] virtual bool tick() = 0;
+        /**
+         * @brief  Check if the switch is running
+         * @return True If the switch is running
+         */
+        [[nodiscard]] bool isRunning() const { return m_bRunning; }
 
         /**
          * @brief  Get the unique ID of the switch.
@@ -79,10 +87,16 @@ namespace Network::Switches {
          */
         [[nodiscard]] const Statistics &getStatistics() const { return m_statistics; }
 
+    protected:
+        virtual void processorTask() = 0;
+
     protected: /** Members **/
         const size_t m_ID;
         const size_t m_portAmount;
         Statistics m_statistics;
         std::vector<Port> m_ports;
+
+        std::thread m_processorTask;
+        bool m_bRunning{false};
     };
 }

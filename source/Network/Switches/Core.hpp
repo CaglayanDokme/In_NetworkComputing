@@ -9,6 +9,7 @@ namespace Network::Switches {
     class Core : public ISwitch {
     public: /** Construction **/
         Core() = delete;
+        ~Core();
         explicit  Core(const size_t portAmount);
 
         // Forbid copying
@@ -17,12 +18,32 @@ namespace Network::Switches {
 
         // Must be move-able to store in containers
         Core(Core &&) = default;
-        Core &operator=(Core &&) = delete;
+        Core &operator=(Core &&) = default;
 
     public: /** Methods **/
-        [[nodiscard]] bool tick() final;
+        /**
+         * @brief Advance the core switches by one tick
+         */
+        static void tick();
+
+        /**
+         * @brief Stop all the core switch
+         */
+        static void stop();
+
+        /**
+         * @brief Check if the last tick has been processed by all core switches
+         */
+        [[nodiscard]] static bool isTickProcessedByAll();
+
+        /**
+         * @brief Blocked wait until the last tick has been processed by all aggregate switches
+         */
+        static void waitTickCompletion();
 
     private:
+        void processorTask() final;
+
         /**
          * @brief Process a message received from a port
          * @param sourcePortIdx Index of the source port
@@ -47,7 +68,6 @@ namespace Network::Switches {
         void redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg);
 
     private: /** Members **/
-        size_t m_nextPort{0};
         std::map<size_t, bool> m_barrierRequestFlags; // Key: Port index, Value: True/False
 
         struct {
@@ -65,5 +85,17 @@ namespace Network::Switches {
 
         inline static size_t nextID = 0; // i.e. Number of core switches in total
         inline static size_t compNodePerPort = 0;
+
+        inline static bool bStopRequested{false};
+
+        inline static size_t tickCounter = 0;
+
+        inline static std::mutex tickUpdateMutex;
+        inline static std::condition_variable tickUpdateNotifier;
+        inline static bool bTickUpdateOccurred{false};
+
+        inline static size_t tickProcessCounter = 0;
+        inline static std::mutex tickCompletedMutex;
+        inline static std::condition_variable tickCompletedNotifier;
     };
 }

@@ -242,23 +242,9 @@ int main(const int argc, const char *const argv[])
     while(++tick) {
         spdlog::trace("Tick #{}", tick);
 
-        for(auto &coreSw : coreSwitches) {
-            if(!coreSw.tick()) {
-                spdlog::error("Tick #{} failed for core switch #{}!", tick, coreSw.getID());
-            }
-        }
-
-        for(auto &aggSw : aggSwitches) {
-            if(!aggSw.tick()) {
-                spdlog::error("Tick #{} failed for aggregate switch #{}!", tick, aggSw.getID());
-            }
-        }
-
-        for(auto &edgeSw : edgeSwitches) {
-            if(!edgeSw.tick()) {
-                spdlog::error("Tick #{} failed for edge switch #{}!", tick, edgeSw.getID());
-            }
-        }
+        Network::Switches::Edge::tick();
+        Network::Switches::Aggregate::tick();
+        Network::Switches::Core::tick();
 
         for(auto &compNode : computeNodes) {
             if(!compNode.tick()) {
@@ -271,7 +257,15 @@ int main(const int argc, const char *const argv[])
 
             break;
         }
+
+        Network::Switches::Core::waitTickCompletion();
+        Network::Switches::Aggregate::waitTickCompletion();
+        Network::Switches::Edge::waitTickCompletion();
     }
+
+    Network::Switches::Edge::stop();
+    Network::Switches::Aggregate::stop();
+    Network::Switches::Core::stop();
 
     spdlog::warn("Program finished after {} ticks!", tick);
 
