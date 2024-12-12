@@ -159,7 +159,7 @@ SpaceBeforeParensOptions:
   AfterRequiresInClause: false
   AfterRequiresInExpression: false
   BeforeNonEmptyParentheses: false
-SpaceBeforeRangeBasedForLoopColon: false
+SpaceBeforeRangeBasedForLoopColon: true
 SpaceBeforeSquareBrackets: false
 SpaceInEmptyBlock: true
 SpacesBeforeTrailingComments: 1
