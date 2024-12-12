@@ -1,17 +1,19 @@
 #include "Port.hpp"
+
 #include "Message.hpp"
-#include <algorithm>
 #include "spdlog/spdlog.h"
+
+#include <algorithm>
 
 using namespace Network;
 
 namespace PortDelays {
-    // Some arbitrary values
+// Some arbitrary values
 
-    static constexpr size_t baseIncomingDelay = 3;
-    static constexpr size_t baseOutgoingDelay = 3;
-    static constexpr size_t bytePerTick = 100;
-};
+static constexpr size_t baseIncomingDelay = 3;
+static constexpr size_t baseOutgoingDelay = 3;
+static constexpr size_t bytePerTick       = 100;
+}; // namespace PortDelays
 
 bool Port::operator==(const Port &port) const
 {
@@ -32,7 +34,7 @@ void Port::pushIncoming(UniqueMsg msg)
         throw std::invalid_argument("Null message given!");
     }
 
-    const auto size = msg->size();
+    const auto size  = msg->size();
     const auto delay = PortDelays::baseIncomingDelay + (size / PortDelays::bytePerTick);
 
     m_incoming.emplace_back(std::move(msg), delay);
@@ -46,7 +48,7 @@ void Port::pushOutgoing(UniqueMsg msg)
         throw std::invalid_argument("Null message given!");
     }
 
-    const auto size = msg->size();
+    const auto size  = msg->size();
     const auto delay = PortDelays::baseOutgoingDelay + (size / PortDelays::bytePerTick);
 
     m_outgoing.emplace_back(std::move(msg), delay);
@@ -71,8 +73,7 @@ void Port::tick()
 
     // Adjust remaining counters
     {
-        auto decrementTick = [&](st_Msg &element)
-        {
+        auto decrementTick = [&](st_Msg &element) {
             if(element.remaining > 0) {
                 --element.remaining;
             }
@@ -91,7 +92,7 @@ bool Port::connect(Port &remotePort)
         return false;
     }
 
-    m_pRemotePort = &remotePort;
+    m_pRemotePort            = &remotePort;
     remotePort.m_pRemotePort = this;
 
     return true;

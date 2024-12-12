@@ -1,8 +1,10 @@
-#include <numeric>
 #include "Edge.hpp"
-#include "spdlog/spdlog.h"
-#include "Network/Constants.hpp"
+
 #include "InterSwitchMessages.hpp"
+#include "Network/Constants.hpp"
+#include "spdlog/spdlog.h"
+
+#include <numeric>
 
 using namespace Network::Switches;
 
@@ -12,7 +14,7 @@ Edge::Edge(const size_t portAmount)
     spdlog::trace("Created edge switch with ID #{}", m_ID);
 
     const size_t subColumnIdx = m_ID % Network::Constants::getSubColumnAmountPerGroup();
-    m_sameColumnPortID = subColumnIdx;
+    m_sameColumnPortID        = subColumnIdx;
 
     // Calculate look-up table for re-direction to down ports
     {
@@ -106,7 +108,7 @@ bool Edge::tick()
     bool bMsgReceived = false;
     for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
         const auto sourcePortIdx = m_nextPort;
-        auto &sourcePort = m_ports.at(sourcePortIdx);
+        auto      &sourcePort    = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
             continue;
@@ -129,59 +131,59 @@ bool Edge::tick()
 
         switch(anyMsg->type()) {
             case Messages::e_Type::DirectMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::Acknowledge: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BroadcastMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BarrierRequest: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BarrierRelease: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Reduce>(static_cast<Messages::Reduce *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::ReduceAll: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Scatter>(static_cast<Messages::Scatter *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::Gather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Gather>(static_cast<Messages::Gather *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::AllGather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::AllGather>(static_cast<Messages::AllGather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::AllGather>(static_cast<Messages::AllGather *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Gather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_AllGather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather *>(anyMsg.release()))));
                 break;
             }
             default: {
@@ -324,7 +326,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Barrier
     }
 
     // Check for re-transmission to up-ports
-    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto& entry) { return entry.second; })) {
+    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto &entry) { return entry.second; })) {
         for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             getUpPort(upPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRequest>()));
         }
@@ -351,12 +353,12 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
 
     // Save into flags
     {
-        const auto upPortIdx = sourcePortIdx;
+        const auto upPortIdx                = sourcePortIdx;
         m_barrierReleaseFlags.at(upPortIdx) = true;
     }
 
     // Check for barrier release
-    if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
+    if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto &entry) { return entry.second; })) {
         for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
             getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
         }
@@ -456,7 +458,7 @@ void Edge::process(const size_t sourcePortIdx, [[maybe_unused]] std::unique_ptr<
             state->push({msg->m_sourceID.value()}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
 
             if(state->m_contributors.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
-                auto txMsg = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
+                auto txMsg    = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
                 txMsg->m_data = std::move(state->m_value);
 
                 m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
@@ -503,16 +505,16 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
 
             state.receiveFlags.at(sourcePortIdx) = true;
             std::transform(state.value.cbegin(),
-                            state.value.cend(),
-                            msg->m_data.cbegin(),
-                            state.value.begin(),
-                            [opType = state.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+                           state.value.cend(),
+                           msg->m_data.cbegin(),
+                           state.value.begin(),
+                           [opType = state.opType](const auto &lhs, const auto &rhs) { return Messages::reduce(lhs, rhs, opType); });
 
             // Check if all down-ports have sent message
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 // Send reduced message to all up-ports
                 for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                    auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                    auto txMsg    = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
                     getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
@@ -522,18 +524,18 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
                 // Reset to-up state
                 state.bOngoing = false;
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
 
                 // Set to-down state
                 m_reduceAllStates.toDown.bOngoing = true;
             }
         }
         else {
-            state.bOngoing = true;
-            state.opType   = msg->m_opType;
-            state.value    = std::move(msg->m_data);
+            state.bOngoing                       = true;
+            state.opType                         = msg->m_opType;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
     }
@@ -561,15 +563,15 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
         }
 
         // Check if this is the first reduce-all message
-        if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; })) {
+        if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return !entry.second; })) {
             if(!state.value.empty()) {
                 spdlog::critical("Edge Switch({}): Reduce-all to-down value wasn't empty!!", m_ID);
 
                 throw std::runtime_error("Edge Switch: Reduce-all to-down value wasn't empty!!");
             }
 
-            state.opType = msg->m_opType;
-            state.value  = std::move(msg->m_data);
+            state.opType                         = msg->m_opType;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
         else {
@@ -590,10 +592,10 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
             state.receiveFlags.at(sourcePortIdx) = true;
 
             // Check if all up-ports have sent message
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 // Send reduced message to all down-ports
                 for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                    auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                    auto txMsg    = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
                     getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
@@ -602,9 +604,9 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::ReduceA
                 // Reset to-down state
                 state.bOngoing = false;
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
 
                 state.value.clear();
             }
@@ -651,11 +653,10 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter
     const auto chunkSize = msg->m_data.size() / compNodeAmount;
 
     std::vector<
-        std::pair<
-            size_t,
-            decltype(msg->m_data)
-        >
-    > chunks;
+    std::pair<
+    size_t,
+    decltype(msg->m_data)>>
+    chunks;
 
     chunks.reserve(compNodeAmount);
 
@@ -679,7 +680,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Scatter
 
             auto uniqueMsg = std::make_unique<Network::Messages::Scatter>(msg->m_sourceID.value());
 
-            auto pChunk = std::find_if(chunks.begin(), chunks.end(), [compNodeIdx = firstCompNodeIdx + downPortIdx](const auto& entry) { return entry.first == compNodeIdx; });
+            auto pChunk = std::find_if(chunks.begin(), chunks.end(), [compNodeIdx = firstCompNodeIdx + downPortIdx](const auto &entry) { return entry.first == compNodeIdx; });
 
             if(pChunk == chunks.end()) {
                 spdlog::critical("Edge Switch({}): Chunk for down-port #{} (i.e. computing node #{}) not found!", m_ID, downPortIdx, firstCompNodeIdx + downPortIdx);
@@ -838,7 +839,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::AllGath
     }
 
     const auto sourceCompNodeIdx = firstCompNodeIdx + (sourcePortIdx - getUpPortAmount());
-    auto &state = m_allGatherStates.toUp;
+    auto      &state             = m_allGatherStates.toUp;
 
     if(state.bOngoing) {
         if(std::any_of(state.value.cbegin(), state.value.cend(), [sourceCompNodeIdx](const auto &entry) { return entry.first == sourceCompNodeIdx; })) {
@@ -924,7 +925,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
         state->push({msg->m_contributors}, msg->m_destinationID.value(), msg->m_opType, std::move(msg->m_data));
 
         if(state->m_contributors.size() == (Network::Constants::deriveComputingNodeAmount() - 1)) {
-            auto txMsg = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
+            auto txMsg    = std::make_unique<Messages::Reduce>(state->m_destinationID, state->m_opType);
             txMsg->m_data = std::move(state->m_value);
 
             m_downPortTable.at(state->m_destinationID).pushOutgoing(std::move(txMsg));
@@ -972,7 +973,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
             throw std::runtime_error("Edge: Scatter message doesn't contain computing node!");
         }
         else if(1 == count) {
-            auto txMsg = std::make_unique<Messages::Scatter>(msg->m_sourceID.value());
+            auto txMsg    = std::make_unique<Messages::Scatter>(msg->m_sourceID.value());
             txMsg->m_data = std::move(std::find_if(msg->m_data.cbegin(), msg->m_data.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; })->second);
 
             if(txMsg->m_data.size() != refSize) {
@@ -1100,7 +1101,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
         if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
             spdlog::debug("Edge({}): All ports have sent their {} messages..", m_ID, msg->typeToString());
 
-            const size_t refDataSize = state.value.at(0).second.size();
+            const size_t                       refDataSize = state.value.at(0).second.size();
             decltype(Messages::Gather::m_data) mergedData;
             for(size_t compNodeIdx = 0; compNodeIdx < Constants::deriveComputingNodeAmount(); ++compNodeIdx) {
                 const auto dataPair = std::find_if(state.value.cbegin(), state.value.cend(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
@@ -1127,7 +1128,7 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
             for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                 spdlog::trace("Edge({}): Preparing all-gather message for down-port #{}..", m_ID, downPortIdx);
 
-                auto txMsg = std::make_unique<Messages::AllGather>();
+                auto txMsg    = std::make_unique<Messages::AllGather>();
                 txMsg->m_data = mergedData;
 
                 getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
@@ -1136,9 +1137,9 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
             // Reset state
             state.bOngoing = false;
             std::transform(state.receiveFlags.begin(),
-                            state.receiveFlags.end(),
-                            std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                            [](auto &entry) { entry.second = false; return entry; });
+                           state.receiveFlags.end(),
+                           std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                           [](auto &entry) { entry.second = false; return entry; });
             state.value.clear();
         }
     }
@@ -1151,9 +1152,9 @@ void Edge::process(const size_t sourcePortIdx, std::unique_ptr<Messages::InterSw
             throw std::runtime_error("Invalid mapping!");
         }
 
-        state.bOngoing = true;
+        state.bOngoing                       = true;
         state.receiveFlags.at(sourcePortIdx) = true;
-        state.value = std::move(msg->m_data);
+        state.value                          = std::move(msg->m_data);
     }
 }
 
@@ -1188,8 +1189,7 @@ void Edge::redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg msg)
 Network::Port &Edge::getAvailableUpPort()
 {
     // Find the up-port with the least messages in it
-    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
-    {
+    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool {
         return (port1.outgoingAmount() < port2.outgoingAmount());
     };
 
@@ -1232,8 +1232,8 @@ void Edge::ReduceState::push(const std::vector<size_t> &sourceIDs, const size_t 
         throw std::runtime_error("Edge Switch: Destination IDs mismatch in reduce messages!");
     }
 
-    for (const auto& sourceID : sourceIDs) {
-        if (std::find(m_contributors.begin(), m_contributors.end(), sourceID) != m_contributors.end()) {
+    for(const auto &sourceID : sourceIDs) {
+        if(std::find(m_contributors.begin(), m_contributors.end(), sourceID) != m_contributors.end()) {
             spdlog::critical("Edge Switch: Source ID {} has already sent a reduce message!", sourceID);
 
             throw std::runtime_error("Edge Switch: Source ID has already sent a reduce message!");
@@ -1245,7 +1245,7 @@ void Edge::ReduceState::push(const std::vector<size_t> &sourceIDs, const size_t 
                    m_value.cend(),
                    data.cbegin(),
                    m_value.begin(),
-                   [opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+                   [opType](const auto &lhs, const auto &rhs) { return Messages::reduce(lhs, rhs, opType); });
 }
 
 void Edge::GatherState::push(const size_t sourceID, const size_t destinationID, std::vector<float> &&data)

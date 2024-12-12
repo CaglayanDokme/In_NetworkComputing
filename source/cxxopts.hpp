@@ -1,3 +1,4 @@
+// clang-format off
 /*
 
 Copyright (c) 2014-2022 Jarryd Beck
@@ -2876,3 +2877,4 @@ Options::group_help(const std::string& group) const
 } // namespace cxxopts
 
 #endif //CXXOPTS_HPP_INCLUDED
+// clang-format on

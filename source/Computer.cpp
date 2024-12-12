@@ -1,6 +1,7 @@
 #include "Computer.hpp"
-#include "spdlog/spdlog.h"
+
 #include "Network/Message.hpp"
+#include "spdlog/spdlog.h"
 
 Computer::Computer()
 : m_ID(nextID++), m_mpi(m_ID)
@@ -71,7 +72,7 @@ void Computer::task()
     spdlog::trace("Computer({}): Task finished..", m_ID);
 
     m_statistics.mpi = m_mpi.getStatistics(); // Synchronize statistics
-    m_bDone = true;
+    m_bDone          = true;
 
-    for( ; true; sleep(1));
+    for(; true; sleep(1));
 }

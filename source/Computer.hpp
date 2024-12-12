@@ -1,17 +1,19 @@
 #pragma once
 
-#include "Network/Port.hpp"
 #include "Network/MPI.hpp"
+#include "Network/Port.hpp"
+
 #include <thread>
 
 class Computer {
 public: /** Struct Declarations **/
-    struct Statistics  {
+    struct Statistics {
         Network::MPI::Statistics mpi;
 
         struct Timings {
             size_t taskStart_tick;
             size_t taskEnd_tick;
+
             size_t taskDuration() const { return taskEnd_tick - taskStart_tick; }
         } timings;
     };
@@ -20,11 +22,11 @@ public: /** Construction **/
     Computer();
 
     // Forbid copying
-    Computer(const Computer &) = delete;
+    Computer(const Computer &)            = delete;
     Computer &operator=(const Computer &) = delete;
 
     // Must be move-able to store in containers
-    Computer(Computer &&) noexcept = default;
+    Computer(Computer &&) noexcept   = default;
     Computer &operator=(Computer &&) = delete;
 
 public: /** Methods **/
@@ -75,15 +77,15 @@ private:
     void task();
 
 private: /** Members **/
-    const size_t m_ID;
-    Network::MPI m_mpi;
-    std::thread m_task;
+    const size_t   m_ID;
+    Network::MPI   m_mpi;
+    std::thread    m_task;
     std::once_flag m_tickStarted;
-    Statistics m_statistics;
-    bool m_bDone{false};
+    Statistics     m_statistics;
+    bool           m_bDone {false};
 
     // Static
-    inline static size_t computingNodeAmount = 0;  // Number of computing nodes to be spawned (Should be set initially)
-    inline static size_t nextID = 0;               // i.e. Number of spawned(up to now) computing nodes in total
-    inline static size_t currentTick = 0;          // Current time of the simulation
+    inline static size_t computingNodeAmount = 0; // Number of computing nodes to be spawned (Should be set initially)
+    inline static size_t nextID              = 0; // i.e. Number of spawned(up to now) computing nodes in total
+    inline static size_t currentTick         = 0; // Current time of the simulation
 };
