@@ -7,9 +7,10 @@
 
 #include "MPI.hpp"
 
+#include "Constants.hpp"
 #include "Network/Switches/ISwitch.hpp"
 #include "spdlog/spdlog.h"
-#include "Constants.hpp"
+
 #include <map>
 
 using namespace Network;
@@ -226,7 +227,7 @@ void MPI::tick()
 
             break;
         }
-        default:  {
+        default: {
             spdlog::critical("MPI({}): Received unknown message type!", m_ID);
 
             ++m_statistics.unknown.received;
@@ -320,7 +321,7 @@ void MPI::send(const std::vector<float> &data, const size_t destinationID)
 
 void MPI::send(const float &data, const size_t destinationID)
 {
-    send(std::vector<float>{data}, destinationID);
+    send(std::vector<float> {data}, destinationID);
 }
 
 void MPI::receive(std::vector<float> &data, const size_t sourceID)
@@ -428,7 +429,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
 
         // Broadcast message
         if(Network::Switches::isNetworkComputingEnabled()) {
-            auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID);
+            auto msg    = std::make_unique<Messages::BroadcastMessage>(m_ID);
             msg->m_data = data;
 
             send(std::move(msg));
@@ -441,7 +442,7 @@ void MPI::broadcast(std::vector<float> &data, const size_t sourceID)
                     continue;
                 }
 
-                auto msg = std::make_unique<Messages::BroadcastMessage>(m_ID, m_targetID);
+                auto msg    = std::make_unique<Messages::BroadcastMessage>(m_ID, m_targetID);
                 msg->m_data = data;
 
                 send(std::move(msg));
@@ -601,8 +602,8 @@ void MPI::barrier()
                         m_barrierRequest.notifier.wait(reqLock, [&]() { return (m_barrierRequest.messages.size() > omittedMsgAmount); });
                     }
 
-                    auto &msg = *m_barrierRequest.messages.at(omittedMsgAmount);
-                    auto pRequestPair = bRequestMap.find(msg.m_sourceID.value());
+                    auto &msg          = *m_barrierRequest.messages.at(omittedMsgAmount);
+                    auto  pRequestPair = bRequestMap.find(msg.m_sourceID.value());
 
                     if((bRequestMap.cend() == pRequestPair) || pRequestPair->second) {
                         spdlog::debug("MPI({}): Received barrier request from an unexpected source({})! {} message waiting, {} omitted", m_ID, msg.m_sourceID.value(), m_barrierRequest.messages.size(), omittedMsgAmount);
@@ -610,7 +611,7 @@ void MPI::barrier()
                         if(0 != omittedMsgAmount) {
                             std::string omittedSourceIDs;
                             for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
-                                omittedSourceIDs += std::to_string( m_barrierRequest.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                                omittedSourceIDs += std::to_string(m_barrierRequest.messages.at(msgIdx)->m_sourceID.value()) + " ";
                             }
 
                             spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
@@ -774,7 +775,7 @@ void MPI::barrier()
                         if(0 != omittedMsgAmount) {
                             std::string omittedSourceIDs;
                             for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
-                                omittedSourceIDs += std::to_string( m_barrierRelease.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                                omittedSourceIDs += std::to_string(m_barrierRelease.messages.at(msgIdx)->m_sourceID.value()) + " ";
                             }
 
                             spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
@@ -911,13 +912,13 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
 
                     auto &msg = *msgIterator->get();
 
-                    std::transform( data.cbegin(),
-                                    data.cend(),
-                                    msg.m_data.cbegin(),
-                                    data.begin(),
-                                    [operation](const float &lhs, const float &rhs) {
-                                        return Messages::reduce(lhs, rhs, operation);
-                                    });
+                    std::transform(data.cbegin(),
+                                   data.cend(),
+                                   msg.m_data.cbegin(),
+                                   data.begin(),
+                                   [operation](const float &lhs, const float &rhs) {
+                        return Messages::reduce(lhs, rhs, operation);
+                    });
 
                     m_reduce.messages.erase(msgIterator);
 
@@ -945,13 +946,13 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
 
                 spdlog::trace("MPI({}): Reducing data with received message..", m_ID);
 
-                std::transform( data.cbegin(),
-                                data.cend(),
-                                msg.m_data.cbegin(),
-                                data.begin(),
-                                [operation](const float &lhs, const float &rhs) {
-                                    return Messages::reduce(lhs, rhs, operation);
-                                });
+                std::transform(data.cbegin(),
+                               data.cend(),
+                               msg.m_data.cbegin(),
+                               data.begin(),
+                               [operation](const float &lhs, const float &rhs) {
+                    return Messages::reduce(lhs, rhs, operation);
+                });
 
                 m_reduce.messages.pop_back();
 
@@ -989,13 +990,13 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
                         throw std::runtime_error("MPI: Received duplicate data!");
                     }
 
-                    std::transform( data.cbegin(),
-                                    data.cend(),
-                                    msg->m_data.cbegin(),
-                                    data.begin(),
-                                    [operation](const float &lhs, const float &rhs) {
-                                        return Messages::reduce(lhs, rhs, operation);
-                                    });
+                    std::transform(data.cbegin(),
+                                   data.cend(),
+                                   msg->m_data.cbegin(),
+                                   data.begin(),
+                                   [operation](const float &lhs, const float &rhs) {
+                        return Messages::reduce(lhs, rhs, operation);
+                    });
 
                     rxFlags.at(msg->m_sourceID.value()) = true;
                 }
@@ -1005,7 +1006,7 @@ void MPI::reduce(std::vector<float> &data, const ReduceOp operation, const size_
         }
     }
     else {
-        auto msg = std::make_unique<Messages::Reduce>(m_ID, destinationID, operation);
+        auto msg    = std::make_unique<Messages::Reduce>(m_ID, destinationID, operation);
         msg->m_data = data;
 
         // Push the message to the port
@@ -1044,7 +1045,7 @@ void MPI::reduceAll(std::vector<float> &data, const ReduceOp operation)
         std::unique_lock lock(m_reduceAll.mutex);
 
         {
-            auto msg = std::make_unique<Messages::ReduceAll>(operation);
+            auto msg    = std::make_unique<Messages::ReduceAll>(operation);
             msg->m_data = std::move(data);
 
             send(std::move(msg));
@@ -1141,7 +1142,7 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
         localChunk.assign(data.cbegin() + (m_ID * chunkSize), data.cbegin() + ((m_ID + 1) * chunkSize));
 
         if(Network::Switches::isNetworkComputingEnabled()) {
-            auto msg = std::make_unique<Messages::Scatter>(m_ID);
+            auto msg    = std::make_unique<Messages::Scatter>(m_ID);
             msg->m_data = std::move(data);
             send(std::move(msg));
         }
@@ -1156,7 +1157,7 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
                 auto msg = std::make_unique<Messages::Scatter>(m_ID, m_targetID);
 
                 const auto pChunkBegin = data.cbegin() + (m_targetID * chunkSize);
-                const auto pChunkEnd = pChunkBegin + chunkSize;
+                const auto pChunkEnd   = pChunkBegin + chunkSize;
 
                 msg->m_data.assign(pChunkBegin, pChunkEnd);
 
@@ -1215,7 +1216,7 @@ void MPI::scatter(std::vector<float> &data, const size_t sourceID)
                     if(0 != omittedMsgAmount) {
                         std::string omittedSourceIDs;
                         for(size_t msgIdx = 0; msgIdx < omittedMsgAmount; ++msgIdx) {
-                            omittedSourceIDs += std::to_string( m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
+                            omittedSourceIDs += std::to_string(m_scatter.messages.at(msgIdx)->m_sourceID.value()) + " ";
                         }
 
                         spdlog::trace("MPI({}): Omitted source IDs: {}", m_ID, omittedSourceIDs);
@@ -1328,12 +1329,14 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
         else {
             std::unique_lock lock(m_gather.mutex);
 
+            // clang-format off
             std::vector<
                 std::pair<
                     size_t,             // Source ID
                     std::vector<float>  // Data
                 >
             > receivedData;
+            // clang-format on
 
             // Check the already queued messages
             {
@@ -1395,7 +1398,7 @@ void MPI::gather(std::vector<float> &data, const size_t destinationID)
         }
     }
     else {
-        auto msg = std::make_unique<Messages::Gather>(m_ID, destinationID);
+        auto msg    = std::make_unique<Messages::Gather>(m_ID, destinationID);
         msg->m_data = data;
 
         send(std::move(msg));

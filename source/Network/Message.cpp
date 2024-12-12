@@ -1,4 +1,5 @@
 #include "Message.hpp"
+
 #include <map>
 #include <spdlog/spdlog.h>
 
@@ -10,7 +11,7 @@ BaseMessage::BaseMessage(const e_Type eType, const Address &sourceID, const Addr
     // Nothing
 }
 
-const std::string & BaseMessage::typeToString() const
+const std::string &BaseMessage::typeToString() const
 {
     return toString(m_eType);
 }
@@ -211,21 +212,21 @@ size_t AllGather::size() const
 const std::string &Network::Messages::toString(const e_Type eType)
 {
     static const std::map<e_Type, std::string> strMap {
-        {e_Type::Acknowledge,      "Acknowledge"},
-        {e_Type::DirectMessage,    "DirectMessage"},
-        {e_Type::BroadcastMessage, "BroadcastMessage"},
-        {e_Type::BarrierRequest,   "BarrierRequest"},
-        {e_Type::BarrierRelease,   "BarrierRelease"},
-        {e_Type::Reduce,           "Reduce"},
-        {e_Type::ReduceAll,        "ReduceAll"},
-        {e_Type::Scatter,          "Scatter"},
-        {e_Type::Gather,           "Gather"},
-        {e_Type::AllGather,        "AllGather"},
+        {     e_Type::Acknowledge,            "Acknowledge"},
+        {   e_Type::DirectMessage,          "DirectMessage"},
+        {e_Type::BroadcastMessage,       "BroadcastMessage"},
+        {  e_Type::BarrierRequest,         "BarrierRequest"},
+        {  e_Type::BarrierRelease,         "BarrierRelease"},
+        {          e_Type::Reduce,                 "Reduce"},
+        {       e_Type::ReduceAll,              "ReduceAll"},
+        {         e_Type::Scatter,                "Scatter"},
+        {          e_Type::Gather,                 "Gather"},
+        {       e_Type::AllGather,              "AllGather"},
 
-        {e_Type::IS_Reduce,        "Inter-Switch Reduce"},
-        {e_Type::IS_Scatter,       "Inter-Switch Scatter"},
-        {e_Type::IS_Gather,        "Inter-Switch Gather"},
-        {e_Type::IS_AllGather,     "Inter-Switch AllGather"},
+        {       e_Type::IS_Reduce,    "Inter-Switch Reduce"},
+        {      e_Type::IS_Scatter,   "Inter-Switch Scatter"},
+        {       e_Type::IS_Gather,    "Inter-Switch Gather"},
+        {    e_Type::IS_AllGather, "Inter-Switch AllGather"},
     };
 
     return strMap.at(eType);
@@ -234,10 +235,10 @@ const std::string &Network::Messages::toString(const e_Type eType)
 const std::string &Network::Messages::toString(const ReduceOperation opType)
 {
     static const std::map<ReduceOperation, std::string> strMap {
-        {ReduceOperation::Sum,      "Sum"},
+        {     ReduceOperation::Sum,      "Sum"},
         {ReduceOperation::Multiply, "Multiply"},
-        {ReduceOperation::Max,      "Max"},
-        {ReduceOperation::Min,      "Min"},
+        {     ReduceOperation::Max,      "Max"},
+        {     ReduceOperation::Min,      "Min"},
     };
 
     return strMap.at(opType);

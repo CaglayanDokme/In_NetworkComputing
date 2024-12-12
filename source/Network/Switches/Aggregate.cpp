@@ -1,7 +1,8 @@
 #include "Aggregate.hpp"
-#include "spdlog/spdlog.h"
-#include "Network/Message.hpp"
+
 #include "Network/Constants.hpp"
+#include "Network/Message.hpp"
+#include "spdlog/spdlog.h"
 
 using namespace Network::Switches;
 
@@ -127,7 +128,7 @@ bool Aggregate::tick()
     bool bMsgReceived = false;
     for(size_t checkedPortAmount = 0; (checkedPortAmount < m_ports.size()) && !bMsgReceived; ++checkedPortAmount, m_nextPort = (m_nextPort + 1) % m_portAmount) {
         const auto sourcePortIdx = m_nextPort;
-        auto &sourcePort = m_ports.at(sourcePortIdx);
+        auto      &sourcePort    = m_ports.at(sourcePortIdx);
 
         if(!sourcePort.hasIncoming()) {
             continue;
@@ -149,44 +150,43 @@ bool Aggregate::tick()
         }
 
         switch(anyMsg->type()) {
-            case Messages::e_Type::DirectMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage*>(anyMsg.release()))));
+            case Messages::e_Type::DirectMessage:
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::DirectMessage>(static_cast<Messages::DirectMessage *>(anyMsg.release()))));
                 break;
-            }
             case Messages::e_Type::Acknowledge: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::Acknowledge>(static_cast<Messages::Acknowledge *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BroadcastMessage: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BroadcastMessage>(static_cast<Messages::BroadcastMessage *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BarrierRequest: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRequest>(static_cast<Messages::BarrierRequest *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::BarrierRelease: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::BarrierRelease>(static_cast<Messages::BarrierRelease *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::ReduceAll: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::ReduceAll>(static_cast<Messages::ReduceAll *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Reduce: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Reduce>(static_cast<Messages::InterSwitch::Reduce *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Scatter: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Scatter>(static_cast<Messages::InterSwitch::Scatter *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_Gather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::Gather>(static_cast<Messages::InterSwitch::Gather *>(anyMsg.release()))));
                 break;
             }
             case Messages::e_Type::IS_AllGather: {
-                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather*>(anyMsg.release()))));
+                process(sourcePortIdx, std::move(std::unique_ptr<Messages::InterSwitch::AllGather>(static_cast<Messages::InterSwitch::AllGather *>(anyMsg.release()))));
                 break;
             }
             default: {
@@ -313,7 +313,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Ba
     }
 
     // Check for re-transmission to up-ports
-    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto& entry) { return entry.second; })) {
+    if(std::all_of(m_barrierRequestFlags.begin(), m_barrierRequestFlags.end(), [](const auto &entry) { return entry.second; })) {
         for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
             getUpPort(upPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRequest>()));
         }
@@ -334,13 +334,13 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Ba
 
     // Save into flags
     {
-        const auto upPortIdx = sourcePortIdx;
+        const auto upPortIdx                = sourcePortIdx;
         m_barrierReleaseFlags.at(upPortIdx) = true;
     }
 
     // Check for barrier release
     {
-        if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto& entry) { return entry.second; })) {
+        if(std::all_of(m_barrierReleaseFlags.begin(), m_barrierReleaseFlags.end(), [](const auto &entry) { return entry.second; })) {
             // Send barrier release to all down-ports
             for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
                 getDownPort(downPortIdx).pushOutgoing(std::move(std::make_unique<Network::Messages::BarrierRelease>()));
@@ -385,16 +385,16 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
 
             state.receiveFlags.at(sourcePortIdx) = true;
             std::transform(state.value.cbegin(),
-                            state.value.cend(),
-                            msg->m_data.cbegin(),
-                            state.value.begin(),
-                            [opType = state.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+                           state.value.cend(),
+                           msg->m_data.cbegin(),
+                           state.value.begin(),
+                           [opType = state.opType](const auto &lhs, const auto &rhs) { return Messages::reduce(lhs, rhs, opType); });
 
             // Check if all down-ports have sent message
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 // Send reduced message to all up-ports
                 for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                    auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                    auto txMsg    = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
                     getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
@@ -404,18 +404,18 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 state.bOngoing = false;
                 state.value.clear();
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
 
                 // Set to-down state
                 m_reduceAllStates.toDown.bOngoing = true;
             }
         }
         else {
-            state.bOngoing = true;
-            state.opType   = msg->m_opType;
-            state.value    = std::move(msg->m_data);
+            state.bOngoing                       = true;
+            state.opType                         = msg->m_opType;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
     }
@@ -443,9 +443,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
         }
 
         // Check if this is the first reduce-all message
-        if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return !entry.second; })) {
-            state.opType = msg->m_opType;
-            state.value  = std::move(msg->m_data);
+        if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return !entry.second; })) {
+            state.opType                         = msg->m_opType;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
         else {
@@ -466,10 +466,10 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
             state.receiveFlags.at(sourcePortIdx) = true;
 
             // Check if all up-ports have sent message
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 // Send reduced message to all down-ports
                 for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                    auto txMsg = std::make_unique<Messages::ReduceAll>(state.opType);
+                    auto txMsg    = std::make_unique<Messages::ReduceAll>(state.opType);
                     txMsg->m_data = state.value;
 
                     getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
@@ -479,9 +479,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::Re
                 state.bOngoing = false;
                 state.value.clear();
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
             }
         }
     }
@@ -527,9 +527,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
     if(m_reduceState.contributors.empty()) {
         spdlog::trace("Aggregate Switch({}): First contributor to the reduce message!", m_ID);
 
-        m_reduceState.opType = msg->m_opType;
-        m_reduceState.value  = std::move(msg->m_data);
-        m_reduceState.contributors = std::move(msg->m_contributors);
+        m_reduceState.opType        = msg->m_opType;
+        m_reduceState.value         = std::move(msg->m_data);
+        m_reduceState.contributors  = std::move(msg->m_contributors);
         m_reduceState.destinationID = msg->m_destinationID.value();
 
         spdlog::trace("Aggregate Switch({}): Operation type is {}, destination ID is #{}.", m_ID, Messages::toString(m_reduceState.opType), m_reduceState.destinationID);
@@ -553,14 +553,14 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
             throw std::runtime_error("Aggregate Switch: Destination ID mismatch in reduce message!");
         }
 
-        for (const auto& contributor : msg->m_contributors) {
+        for(const auto &contributor : msg->m_contributors) {
             if(Network::Constants::getSubColumnIdxOfCompNode(contributor) != m_subColumnIdx) {
                 spdlog::critical("Aggregate Switch({}): Contributor computing node #{} is not in the same sub-column!", m_ID, contributor);
 
                 throw std::runtime_error("Aggregate Switch: Contributor computing node is not in the same sub-column!");
             }
 
-            if (std::find(m_reduceState.contributors.begin(), m_reduceState.contributors.end(), contributor) != m_reduceState.contributors.end()) {
+            if(std::find(m_reduceState.contributors.begin(), m_reduceState.contributors.end(), contributor) != m_reduceState.contributors.end()) {
                 spdlog::critical("Aggregate Switch({}): Duplicate contribution from computing node #{} in reduce message!", m_ID, contributor);
 
                 throw std::runtime_error("Aggregate Switch: Duplicate contribution in reduce message!");
@@ -575,7 +575,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                        m_reduceState.value.cend(),
                        msg->m_data.cbegin(),
                        m_reduceState.value.begin(),
-                       [opType = m_reduceState.opType](const auto& lhs, const auto& rhs) { return Messages::reduce(lhs, rhs, opType); });
+                       [opType = m_reduceState.opType](const auto &lhs, const auto &rhs) { return Messages::reduce(lhs, rhs, opType); });
 
         static const auto sameSubColumnEdgeSwAmount = Network::Constants::getGroupAmount() - 1; // Exclude itself
 
@@ -588,9 +588,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 // Send the reduced data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
 
-                txMsg->m_data = std::move(m_reduceState.value);
+                txMsg->m_data         = std::move(m_reduceState.value);
                 txMsg->m_contributors = std::move(m_reduceState.contributors);
-                txMsg->m_opType = m_reduceState.opType;
+                txMsg->m_opType       = m_reduceState.opType;
 
                 getPort(m_sameColumnPortID).pushOutgoing(std::move(txMsg));
             }
@@ -603,9 +603,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 // Send the reduced data to the destination computing node's edge switch
                 auto txMsg = std::make_unique<Messages::InterSwitch::Reduce>(m_reduceState.destinationID);
 
-                txMsg->m_data = std::move(m_reduceState.value);
+                txMsg->m_data         = std::move(m_reduceState.value);
                 txMsg->m_contributors = std::move(m_reduceState.contributors);
-                txMsg->m_opType = m_reduceState.opType;
+                txMsg->m_opType       = m_reduceState.opType;
 
                 m_downPortTable.find(m_reduceState.destinationID)->second.pushOutgoing(std::move(txMsg));
             }
@@ -641,14 +641,14 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
 
             const auto localFirstCompNodeIdx = firstCompNodeIdx + (downPortIdx * downPortAmount);
             for(size_t compNodeIdx = localFirstCompNodeIdx; compNodeIdx < (localFirstCompNodeIdx + downPortAmount); ++compNodeIdx) {
-                auto iterator = std::find_if(msg->m_data.begin(), msg->m_data.end(), [compNodeIdx](const auto& entry) { return entry.first == compNodeIdx; });
+                auto iterator = std::find_if(msg->m_data.begin(), msg->m_data.end(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
                 if(msg->m_data.end() == iterator) {
                     spdlog::critical("Aggregate Switch({}): Computing node #{} is not found in the scatter message!", m_ID, compNodeIdx);
 
                     throw std::runtime_error("Aggregate Switch: Computing node is not found in the scatter message!");
                 }
 
-                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = compNodeIdx;
+                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first  = compNodeIdx;
                 txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).second = std::move(iterator->second);
                 msg->m_data.erase(iterator); // Accelerate the search for the next computing node
             }
@@ -656,7 +656,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
             getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
         }
     }
-    else { // Coming from a down-port
+    else {                                                         // Coming from a down-port
         const auto expectedSize = compNodeAmount - downPortAmount; // The first edge switch has already distributed to down-port amount of computing nodes
 
         if(msg->m_data.size() != expectedSize) {
@@ -676,14 +676,14 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
 
             const auto localFirstCompNodeIdx = firstCompNodeIdx + (downPortIdx * downPortAmount);
             for(size_t compNodeIdx = localFirstCompNodeIdx; compNodeIdx < (localFirstCompNodeIdx + downPortAmount); ++compNodeIdx) {
-                auto iterator = std::find_if(msg->m_data.begin(), msg->m_data.end(), [compNodeIdx](const auto& entry) { return entry.first == compNodeIdx; });
+                auto iterator = std::find_if(msg->m_data.begin(), msg->m_data.end(), [compNodeIdx](const auto &entry) { return entry.first == compNodeIdx; });
                 if(msg->m_data.end() == iterator) {
                     spdlog::critical("Aggregate Switch({}): Computing node #{} is not found in the scatter message!", m_ID, compNodeIdx);
 
                     throw std::runtime_error("Aggregate Switch: Computing node is not found in the scatter message!");
                 }
 
-                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first = iterator->first;
+                txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).first  = iterator->first;
                 txMsg->m_data.at(compNodeIdx - localFirstCompNodeIdx).second = std::move(iterator->second);
 
                 msg->m_data.erase(iterator); // Extract the redirected content to optimize search and prepare for up-port redirection
@@ -760,7 +760,6 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
 
                     throw std::runtime_error("Aggregate Switch: Duplicate contribution in gather message!");
                 }
-
             }
 
             if(incomingEntry.second.size() != m_gatherState.value.at(0).second.size()) {
@@ -831,11 +830,11 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
             state.value.insert(state.value.end(), msg->m_data.cbegin(), msg->m_data.cend());
             state.receiveFlags.at(sourcePortIdx) = true;
 
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 spdlog::trace("Aggregate Switch({}): All-gather message received from all down-ports! Re-directing..", m_ID);
 
                 for(size_t upPortIdx = 0; upPortIdx < getUpPortAmount(); ++upPortIdx) {
-                    auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+                    auto txMsg    = std::make_unique<Messages::InterSwitch::AllGather>();
                     txMsg->m_data = state.value;
 
                     getUpPort(upPortIdx).pushOutgoing(std::move(txMsg));
@@ -844,9 +843,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 state.bOngoing = false;
                 state.value.clear();
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
             }
         }
         else {
@@ -857,8 +856,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 throw std::runtime_error("Aggregate Switch: Invalid mapping!");
             }
 
-            state.bOngoing = true;
-            state.value = std::move(msg->m_data);
+            state.bOngoing                       = true;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
     }
@@ -866,7 +865,7 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
         auto &state = m_allGatherStates.toDown;
 
         if(state.bOngoing) {
-            if((state.value.size() != msg->m_data.size())) {
+            if(state.value.size() != msg->m_data.size()) {
                 spdlog::critical("Aggregate Switch({}): Received a {} message with invalid length from source port #{}!", m_ID, msg->typeToString(), sourcePortIdx);
                 spdlog::debug("Aggregate Switch({}): Expected length was {}, got {}", m_ID, state.value.size(), msg->m_data.size());
 
@@ -881,11 +880,11 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
 
             state.receiveFlags.at(sourcePortIdx) = true;
 
-            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto& entry) { return entry.second; })) {
+            if(std::all_of(state.receiveFlags.cbegin(), state.receiveFlags.cend(), [](const auto &entry) { return entry.second; })) {
                 spdlog::trace("Aggregate Switch({}): All-gather message received from all up-ports! Re-directing..", m_ID);
 
                 for(size_t downPortIdx = 0; downPortIdx < getDownPortAmount(); ++downPortIdx) {
-                    auto txMsg = std::make_unique<Messages::InterSwitch::AllGather>();
+                    auto txMsg    = std::make_unique<Messages::InterSwitch::AllGather>();
                     txMsg->m_data = state.value;
 
                     getDownPort(downPortIdx).pushOutgoing(std::move(txMsg));
@@ -895,9 +894,9 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 state.bOngoing = false;
                 state.value.clear();
                 std::transform(state.receiveFlags.begin(),
-                                state.receiveFlags.end(),
-                                std::inserter(state.receiveFlags, state.receiveFlags.begin()),
-                                [](auto& entry) { entry.second = false; return entry; });
+                               state.receiveFlags.end(),
+                               std::inserter(state.receiveFlags, state.receiveFlags.begin()),
+                               [](auto &entry) { entry.second = false; return entry; });
             }
         }
         else {
@@ -908,8 +907,8 @@ void Aggregate::process(const size_t sourcePortIdx, std::unique_ptr<Messages::In
                 throw std::runtime_error("Aggregate Switch: Invalid mapping!");
             }
 
-            state.bOngoing = true;
-            state.value = std::move(msg->m_data);
+            state.bOngoing                       = true;
+            state.value                          = std::move(msg->m_data);
             state.receiveFlags.at(sourcePortIdx) = true;
         }
     }
@@ -947,8 +946,7 @@ void Aggregate::redirect(const size_t sourcePortIdx, Network::Port::UniqueMsg ms
 Network::Port &Aggregate::getAvailableUpPort()
 {
     // Find the up-port with the least messages in it
-    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool
-    {
+    auto portSearchPolicy = [&](const Port &port1, const Port &port2) -> bool {
         return (port1.outgoingAmount() < port2.outgoingAmount());
     };
 
