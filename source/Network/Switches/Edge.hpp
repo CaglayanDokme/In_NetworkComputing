@@ -120,7 +120,6 @@ private:                                            /** Members **/
         } toUp, toDown;
     } m_reduceAllStates;
 
-
     struct GatherState {
         // clang-format off
         std::vector<
@@ -135,7 +134,6 @@ private:                                            /** Members **/
 
         void push(const size_t sourceID, const size_t destinationID, std::vector<float> &&data);
     };
-
 
     struct {
         std::optional<GatherState> toUp, toDown;
