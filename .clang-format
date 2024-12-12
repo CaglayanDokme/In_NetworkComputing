@@ -120,7 +120,7 @@ ConstructorInitializerIndentWidth: 0
 ContinuationIndentWidth: 0
 Cpp11BracedListStyle: true
 IndentAccessModifiers: false
-IndentCaseBlocks: true
+IndentCaseBlocks: false
 IndentCaseLabels: true
 IndentExternBlock: true
 IndentGotoLabels: false
