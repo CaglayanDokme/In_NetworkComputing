@@ -129,7 +129,7 @@ IndentRequiresClause: false
 IndentWidth: 4
 IndentWrappedFunctionNames: false
 LambdaBodyIndentation: OuterScope
-NamespaceIndentation: All
+NamespaceIndentation: Inner
 PPIndentWidth: 4
 PointerAlignment: Right
 QualifierAlignment: Custom
