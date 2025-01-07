@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the following metadata."
+title: "In-Network Computing Simulator for Parallel Programming"
+authors:
+  - family-names: "Dokme"
+    given-names: "Caglayan"
+date-released: "2025-01-07"
+version: "1.0.0"
+url: "https://github.com/CaglayanDokme/In_NetworkComputing"
+license: "None"
